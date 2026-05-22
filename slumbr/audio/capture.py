@@ -61,17 +61,36 @@ class AudioRecorder:
     def _open_stream(self) -> None:
         if self._stream is not None:
             return
+        # Resolve string device names to an explicit int index so we
+        # dodge sounddevice's "Multiple input devices found" error
+        # when the same name lives under MME + DirectSound + WASAPI
+        # (e.g. "Microphone (HyperX QuadCast 2 S)" after VB-Cable is
+        # installed and Windows enumerates the new endpoints). The
+        # resolver prefers WASAPI and tolerates MME's 31-char name
+        # truncation. ``None`` (= system default) is passed through.
+        resolved: int | str | None = self.device
+        if isinstance(self.device, str):
+            from .mirror import resolve_device_index  # noqa: PLC0415
+            idx = resolve_device_index(self.device, want_input=True)
+            if idx is not None:
+                resolved = idx
+            else:
+                log.warning(
+                    "could not resolve input device %r — falling back to default",
+                    self.device,
+                )
+                resolved = None
         try:
             self._stream = sd.InputStream(
                 samplerate=self.samplerate,
                 channels=self.channels,
                 dtype=DTYPE,
                 blocksize=BLOCKSIZE,
-                device=self.device,
+                device=resolved,
                 callback=self._callback,
             )
             self._stream.start()
-            log.info("stream open (device=%r)", self.device)
+            log.info("stream open (device=%r -> %r)", self.device, resolved)
         except Exception as e:  # noqa: BLE001
             log.error("could not open stream: %s", e)
             self._stream = None

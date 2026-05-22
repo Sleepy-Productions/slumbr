@@ -421,12 +421,35 @@ class SlumbrApp:
     # ----------------------------------------------------- mic mirror
 
     def _try_open_mic_mirror(self) -> None:
-        """Open the virtual-mic mirror per the current config, if any."""
-        if not self.config.mic_routing_enabled or not self.config.mic_routing_device_name:
+        """Open the virtual-mic mirror per the current config, if any.
+
+        If routing is enabled but no device is set (e.g. user ticked the
+        checkbox before the Behavior tab's auto-preselect was persisted),
+        we auto-pick the first detected cable and save the choice. This
+        keeps the feature functional even on a half-configured state.
+        """
+        if not self.config.mic_routing_enabled:
             return
+        device = self.config.mic_routing_device_name
+        if not device:
+            from .audio.mirror import find_virtual_cables  # noqa: PLC0415
+            cables = find_virtual_cables()
+            if not cables:
+                log.info(
+                    "mic_routing enabled but no virtual cable detected — "
+                    "skipping mirror. Install VB-Cable via Settings → Behavior."
+                )
+                return
+            device = cables[0][1]
+            self.config.mic_routing_device_name = device
+            try:
+                self.config.save()
+            except Exception as e:  # noqa: BLE001
+                log.warning("config save during mic_routing auto-pick failed: %s", e)
+            log.info("mic_routing auto-picked device: %r", device)
         try:
             self.mic_mirror = MicMirror(
-                self.config.mic_routing_device_name,
+                device,
                 samplerate=SAMPLE_RATE,
                 channels=1,
             )
@@ -435,36 +458,42 @@ class SlumbrApp:
             log.warning(
                 "could not open mic mirror for %r (%s); routing disabled until next "
                 "config change",
-                self.config.mic_routing_device_name, e,
+                device, e,
             )
             self.mic_mirror = None
 
     def _reconcile_mic_mirror(self) -> None:
         """Hot-reconcile the running mirror with the current config.
 
-        Three transitions to handle:
-          - disabled → enabled : open + start a new mirror
+        Transitions handled:
+          - disabled → enabled : open + start a new mirror (with auto-pick
+                                 if the user toggled the checkbox without
+                                 explicitly picking a device)
           - enabled → disabled : stop + drop the current mirror
           - device changed     : stop the old mirror, open a new one
         """
-        desired_on = bool(self.config.mic_routing_enabled and self.config.mic_routing_device_name)
-
-        if not desired_on:
+        if not self.config.mic_routing_enabled:
             if self.mic_mirror is not None:
                 self.mic_mirror.stop()
                 self.mic_mirror = None
             return
 
-        # desired_on == True from here.
-        cur_device = (
-            getattr(self.mic_mirror, "_device", None) if self.mic_mirror is not None else None
-        )
-        if self.mic_mirror is not None and cur_device == self.config.mic_routing_device_name:
-            return  # already running on the right device
-        if self.mic_mirror is not None:
+        # Routing is enabled. If we have no mirror yet (just-enabled or
+        # crashed earlier), let ``_try_open_mic_mirror`` handle the
+        # auto-pick + open path.
+        if self.mic_mirror is None:
+            self._try_open_mic_mirror()
+            return
+
+        # Already running — check whether the user picked a different
+        # device. Compare by name (MicMirror stores the original name
+        # passed in; the resolved int index isn't comparable to config).
+        cur_name = getattr(self.mic_mirror, "_device_name", "")
+        target = self.config.mic_routing_device_name
+        if target and cur_name != target:
             self.mic_mirror.stop()
             self.mic_mirror = None
-        self._try_open_mic_mirror()
+            self._try_open_mic_mirror()
 
     def _on_hotkey_changed(self, vk: int) -> None:
         log.info("hotkey rebound to %s (vk=%#x)", vk_label(vk), vk)
