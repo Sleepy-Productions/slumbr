@@ -44,10 +44,22 @@ Both models download from Hugging Face on first launch and are cached locally. A
 ```powershell
 git clone https://github.com/SIeepyDev/slumbr.git
 cd slumbr
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -e .
-python -m slumbr
+.\install.ps1
+```
+
+`install.ps1` is idempotent — it locates a Python 3.10–3.12, creates `.venv`, installs runtime + dev extras, builds the icon, and drops a Slumbr shortcut on your desktop. Re-run any time to refresh deps. Useful flags:
+
+```powershell
+.\install.ps1 -Rebuild       # wipe .venv and start clean
+.\install.ps1 -NoShortcut    # skip the desktop shortcut
+.\install.ps1 -NoDevExtras   # skip pytest + ruff (smaller install)
+```
+
+Once installed, launch via the desktop shortcut, or manually:
+
+```powershell
+.\.venv\Scripts\pythonw.exe -m slumbr   # no console window
+.\.venv\Scripts\python.exe -m slumbr --debug   # with verbose logs
 ```
 
 Default hotkey: **Caps Lock** (tap once to start, tap again to stop). Hotkey is configurable from the Settings dialog.
@@ -71,7 +83,7 @@ Terminals reserve Ctrl+V as a literal character prefix. Open Settings → Paste 
 The warm-up pass runs at startup, but the first *real* transcription still pays a small one-time decoder cost. Subsequent utterances settle into the ~250–400 ms range.
 
 **"cublas64_12.dll not found" or similar CUDA error.**
-Slumbr expects CUDA 12.x and cuDNN 9.x via the official NVIDIA pip wheels (`nvidia-cublas-cu12`, `nvidia-cudnn-cu12`, `nvidia-cuda-nvrtc-cu12`). They're pulled in transitively by `faster-whisper`. If you see this error, verify your Python environment is the same one Slumbr was installed into.
+Slumbr ships the CUDA 12.x runtime via the official NVIDIA pip wheels (`nvidia-cublas-cu12`, `nvidia-cudnn-cu12`, `nvidia-cuda-nvrtc-cu12`), which are pinned in `pyproject.toml`. If you still see this error, you're probably launching Slumbr against a different Python interpreter than the one `pip install -e .` ran in — verify with `where python` that the active interpreter is the venv's, and re-run `pip install -e .` against it.
 
 **Microphone shows the wrong device.**
 Open Settings → Input device → pick your mic by name. Slumbr stores the device name (not its numeric index) so the choice survives USB-mic hot-plug.

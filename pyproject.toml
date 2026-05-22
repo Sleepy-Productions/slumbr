@@ -35,6 +35,12 @@ dependencies = [
     "pyqtgraph",
     "pystray",
     "Pillow",
+    # CUDA runtime for ctranslate2 (faster-whisper backend). ctranslate2 4.x
+    # dropped these as transitive deps — they must be pinned here or every
+    # fresh install hits "cublas64_12.dll not found" on first transcribe.
+    "nvidia-cublas-cu12",
+    "nvidia-cudnn-cu12",
+    "nvidia-cuda-nvrtc-cu12",
 ]
 
 [project.optional-dependencies]
