@@ -1,34 +1,47 @@
-"""QApplication wiring — tray + popup + hotkey + hub.
+"""QApplication wiring — tray + popup + hotkey + settings dialog.
 
 Threading model
 ---------------
-- Qt main thread owns the state machine, popup, paste, engine-call sites,
-  and the hub window.
-- The pynput hook thread (configurable single-key filter) emits
-  `bridge.toggle` via signal, which lands on the main thread via
-  QueuedConnection.
-- The pystray thread (tray loop) emits `bridge.toggle`,
-  `bridge.open_settings`, or `bridge.quit_requested` the same way.
+- Qt main thread owns the state machine, popup, paste, transcriber call
+  sites, and the Settings dialog.
+- The pynput hook thread emits ``bridge.toggle`` via signal, which lands
+  on the main thread via QueuedConnection.
+- The pystray thread (tray loop) emits ``bridge.toggle``,
+  ``bridge.open_settings``, or ``bridge.quit_requested`` the same way.
 - Audio is captured by sounddevice's PortAudio thread — that callback
-  emits `bridge.audio_chunk` (queued) so the popup's visualizer can
+  emits ``bridge.audio_chunk`` (queued) so the popup's visualizer can
   redraw on the main thread without touching Qt widgets from PortAudio.
-- Transcription runs inside `TranscribeWorker` (a QThread, see
-  `slumbr/stt/worker.py`). `done` and `failed` auto-queue back to the
-  main thread.
+- Transcription runs inside ``TranscribeWorker`` (a QThread, see
+  ``slumbr/stt/worker.py``). ``done`` and ``failed`` auto-queue back to
+  the main thread.
+
+Startup ordering
+----------------
+``slumbr/__init__.py`` already preloads ``ctranslate2`` (which forces
+the NVIDIA CUDA DLLs into the process) BEFORE PySide6 imports happen,
+so we can freely construct QApplication first and then build the
+transcriber via the factory. The old "engine before QApplication"
+constraint is satisfied by the import-time bootstrap.
+
+The first-launch wizard runs as a modal ``QDialog.exec()`` before any
+tray icon, hotkey hook, or recorder gets installed — so the nested
+event loop has nothing to fight.
 """
 
 from __future__ import annotations
 
 import logging
 import sys
+import threading
 import time
 from pathlib import Path
 
 import numpy as np
 from PySide6.QtCore import QObject, Qt, QTimer, Signal
 from PySide6.QtGui import QIcon
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QDialog
 
+from . import history
 from .audio.capture import SAMPLE_RATE, AudioRecorder
 from .config import SlumbrConfig
 from .input.foreground import ForegroundTracker
@@ -37,11 +50,13 @@ from .input.keymap import vk_label
 from .input.paste import paste_text
 from .polish import polish
 from .state import State, StateMachine
-from .stt.engine import WhisperEngine
+from .stt.factory import build_transcriber
+from .stt.protocol import Transcriber
 from .stt.streaming_engine import StreamingASREngine
 from .stt.worker import TranscribeWorker
-from .ui.main_window import MainWindow
 from .ui.popup import RecordingPopup
+from .ui.settings_dialog import SettingsDialog
+from .ui.setup_wizard import SetupWizard
 from .ui.tray import SlumbrTray
 
 log = logging.getLogger(__name__)
@@ -49,56 +64,19 @@ log = logging.getLogger(__name__)
 _ASSET_DIR = Path(__file__).resolve().parent / "assets"
 _ICON_PATH = _ASSET_DIR / "icon.ico"
 
-DEFAULT_DEVICE = "cuda"
 MIN_AUDIO_SECONDS = 0.3
 
 
 class _Bridge(QObject):
-    toggle = Signal(str)  # source tag: "hotkey", "tray", "main_window"
+    toggle = Signal(str)            # source tag: "hotkey", "tray"
     open_settings = Signal()
-    show_main_window = Signal()
     quit_requested = Signal()
-    audio_chunk = Signal(object)  # numpy ndarray payload
+    audio_chunk = Signal(object)    # numpy ndarray payload
 
 
 class SlumbrApp:
     def __init__(self) -> None:
-        # Engine MUST load before QApplication. PySide6's Qt bootstrap
-        # perturbs the Windows DLL search path in a way that breaks
-        # CTranslate2's lazy cuBLAS/cuDNN load — the first
-        # `WhisperModel(...)` after `QApplication()` crashes natively
-        # (exit code 5, no traceback). Once the model is loaded, later
-        # transcribes are fine because the DLLs are resolved into the
-        # process. The order also matters at import time, hence
-        # `slumbr/__init__.py` doing a preload of `ctranslate2`.
-        # Load config BEFORE the engine so we can hand it model+precision
-        # and runtime knobs in one shot. language + initial_prompt are
-        # hot-tunable via Settings; model_size + compute_type take effect
-        # only on the next launch (faster-whisper has no hot-swap).
-        _early_config = SlumbrConfig.load()
-        log.info(
-            "loading Whisper model=%r compute_type=%r (first launch downloads it)",
-            _early_config.model_size,
-            _early_config.compute_type,
-        )
-        self.engine = WhisperEngine(
-            model_size=_early_config.model_size,
-            device=DEFAULT_DEVICE,
-            compute_type=_early_config.compute_type,
-            language=_early_config.language or None,
-            initial_prompt=_early_config.initial_prompt,
-        )
-        self.engine.warm_up()
-
-        # Streaming engine for live popup partials. CPU-only by design (no
-        # GPU contention with Whisper) — Moonshine base int8 + Silero VAD
-        # + LocalAgreement-2 commit. When the user has enabled the
-        # experimental leading edge, a sherpa-onnx streaming Zipformer
-        # rides alongside for the visible tentative tail.
-        self.streaming_engine = StreamingASREngine(
-            enable_streaming_leading_edge=_early_config.streaming_visual_leading_edge,
-        )
-
+        # ----- QApplication first, so the wizard can use Qt widgets.
         self.qapp = QApplication(sys.argv)
         self.qapp.setQuitOnLastWindowClosed(False)
         self._app_icon: QIcon | None = None
@@ -106,72 +84,99 @@ class SlumbrApp:
             self._app_icon = QIcon(str(_ICON_PATH))
             self.qapp.setWindowIcon(self._app_icon)
 
-        # Re-use the config we loaded for the engine instead of reading the
-        # file twice — keeps startup tight and avoids drift if the file
-        # changes between the two loads.
-        self.config = _early_config
+        # ----- Config (with legacy → BackendConfig migration).
+        self.config = SlumbrConfig.load()
 
+        # ----- First-launch wizard if backend isn't set yet.
+        if self.config.backend is None:
+            log.info("first launch: showing setup wizard")
+            wizard = SetupWizard(self.config, app_icon=self._app_icon)
+            result = wizard.exec()
+            if result != QDialog.Accepted or self.config.backend is None:
+                log.info("setup wizard cancelled — exiting")
+                raise SystemExit(0)
+
+        log.info(
+            "selected backend=%s model=%s",
+            self.config.backend.name,
+            self.config.backend.model,
+        )
+
+        # ----- Transcriber (primary STT engine).
+        self.transcriber: Transcriber = build_transcriber(
+            self.config.backend,
+            language=self.config.language or None,
+            initial_prompt=self.config.initial_prompt,
+        )
+        self.transcriber.warm_up()
+
+        # ----- Streaming engine for live popup partials. Always Moonshine
+        # on CPU; runs in parallel with whatever primary backend the user
+        # picked so popup partials work even on NVIDIA where Whisper isn't
+        # streaming-native.
+        self.streaming_engine = StreamingASREngine(
+            enable_streaming_leading_edge=self.config.streaming_visual_leading_edge,
+        )
+
+        # ----- App state + popup + foreground tracker.
         self.state = StateMachine()
         self.popup = RecordingPopup()
         self.foreground = ForegroundTracker()
         self.foreground.start()
         self._paste_target_hwnd: int | None = None
 
+        # ----- Mid-session backend-swap lock. Held while Settings is
+        # tearing down the old transcriber + warming the new one; the
+        # hotkey handler short-circuits while held so a Caps Lock tap
+        # during the swap doesn't race a half-destroyed engine. Phase 1
+        # leaves the actual swap unwired (changes require restart per
+        # the Engine tab's notice); the lock is here for Phase 3.
+        self._swap_lock = threading.Lock()
+
+        # ----- Bridge signals (cross-thread → main thread).
         self.bridge = _Bridge()
         self.bridge.toggle.connect(self._on_toggle, Qt.QueuedConnection)
         self.bridge.open_settings.connect(self._on_open_settings, Qt.QueuedConnection)
-        self.bridge.show_main_window.connect(self._on_show_main_window, Qt.QueuedConnection)
         self.bridge.quit_requested.connect(self._on_quit, Qt.QueuedConnection)
         self.bridge.audio_chunk.connect(self._on_audio_chunk, Qt.QueuedConnection)
 
-        # Main window is the persistent control hub. Construct here so tray
-        # callbacks can reach it; show after tray/hotkey are wired below.
-        self.main_window = MainWindow(
-            config=self.config,
-            on_toggle=lambda: self.bridge.toggle.emit("main_window"),
-            on_quit=self.bridge.quit_requested.emit,
-            on_config_changed=self._on_config_changed,
-            on_hotkey_changed=self._on_hotkey_changed,
-            app_icon=self._app_icon,
-        )
-
-        # Recorder wires on_chunk -> bridge.audio_chunk.emit; that signal,
-        # connected with QueuedConnection, marshals the numpy array onto
-        # the Qt main thread where the visualizer can safely consume it.
+        # ----- Audio recorder.
         self.recorder = AudioRecorder(
             device=self.config.input_device_name,
             on_chunk=self._on_audio_thread_chunk,
         )
 
+        # ----- Tray.
         self.tray = SlumbrTray(
             on_toggle=lambda: self.bridge.toggle.emit("tray"),
-            on_show_window=self.bridge.show_main_window.emit,
             on_settings=self.bridge.open_settings.emit,
             on_quit=self.bridge.quit_requested.emit,
             hotkey_label=vk_label(self.config.hotkey_vk),
         )
         self.tray.start()
 
-        # Open the hub on launch so the user has somewhere to land.
-        self.main_window.show()
-
+        # ----- Hotkey hook (low-level WH_KEYBOARD_LL).
         self.hotkey = Hotkey(
             vk=self.config.hotkey_vk,
             on_press=lambda: self.bridge.toggle.emit("hotkey"),
         )
         self.hotkey.start()
 
+        # ----- Elapsed-timer for popup MM:SS during recording.
         self._elapsed_timer = QTimer()
         self._elapsed_timer.setInterval(200)
         self._elapsed_timer.timeout.connect(self._update_elapsed)
         self._record_started_at = 0.0
 
+        # ----- Per-utterance worker handle.
         self._worker: TranscribeWorker | None = None
 
-        # Wall-clock anchors for end-to-end latency tracing. Set on toggle
-        # and consulted at each pipeline boundary so the log reads like
-        # `+312ms transcribe → +18ms paste`.
+        # ----- Wall-clock anchor for end-to-end latency tracing.
         self._t_stop_pressed: float = 0.0
+
+        # ----- Settings dialog is built lazily on first open so startup
+        # doesn't pay the cost for users who never touch it.
+        self._settings_dialog: SettingsDialog | None = None
 
         log.info(
             "ready. Tap %s to start/stop. Quit from the tray.",
@@ -181,13 +186,10 @@ class SlumbrApp:
     # ------------------------------------------------------- audio chunk hop
     def _on_audio_thread_chunk(self, samples: np.ndarray) -> None:
         # Called on PortAudio thread. Marshal onto Qt main thread.
-        # `.copy()` because the array is owned by PortAudio's ring buffer.
         self.bridge.audio_chunk.emit(samples.copy())
 
     def _on_audio_chunk(self, samples) -> None:
-        # On Qt main thread. Two consumers of the chunk:
-        # 1) the popup visualizer bars (cheap repaint)
-        # 2) the streaming ASR engine (sherpa-onnx, ~15 ms decode per chunk)
+        # On Qt main thread.
         self.popup.push_samples(samples)
         if self.state.state is State.RECORDING:
             try:
@@ -196,22 +198,24 @@ class SlumbrApp:
                 log.warning("streaming-engine feed failed: %s", e)
                 return
             if partial.committed or partial.tentative:
-                # Moonshine + online-punct produce properly cased +
-                # punctuated text; LocalAgreement-2 in the engine has
-                # split it into (committed, tentative) — the popup draws
-                # them at different opacities.
                 self.popup.set_partial(partial.committed, partial.tentative)
 
     # --------------------------------------------------------------- toggle
     def _on_toggle(self, source: str = "?") -> None:
-        current = self.state.state
-        log.debug("toggle source=%s state=%s", source, current.value)
-        if current is State.IDLE:
-            self._start_recording()
-        elif current is State.RECORDING:
-            self._stop_and_transcribe()
-        else:
-            log.debug("ignore toggle during %s", current.value)
+        if not self._swap_lock.acquire(blocking=False):
+            log.info("toggle ignored — backend swap in progress")
+            return
+        try:
+            current = self.state.state
+            log.debug("toggle source=%s state=%s", source, current.value)
+            if current is State.IDLE:
+                self._start_recording()
+            elif current is State.RECORDING:
+                self._stop_and_transcribe()
+            else:
+                log.debug("ignore toggle during %s", current.value)
+        finally:
+            self._swap_lock.release()
 
     def _start_recording(self) -> None:
         if not self.state.try_transition(State.RECORDING):
@@ -219,9 +223,6 @@ class SlumbrApp:
         t_toggle = time.monotonic()
         self._paste_target_hwnd = self.foreground.last_hwnd()
         log.info("IDLE -> RECORDING (target hwnd=%s)", self._paste_target_hwnd)
-        # Show the popup BEFORE arming the recorder. recorder.start() is
-        # already a cheap flag-flip (stream is always open) but ordering
-        # this way means the popup paints first if anything slips.
         self.popup.show_recording()
         try:
             self.recorder.start()
@@ -229,15 +230,7 @@ class SlumbrApp:
             log.error("could not start recording: %s", e)
             self._reset_to_idle()
             return
-        # Begin a fresh streaming session for this utterance — popup partials
-        # will start landing as soon as audio arrives (~300 ms latency).
         self.streaming_engine.start_session()
-        # Seed the streaming engine with the ~500 ms of audio captured
-        # before the hotkey was pressed. Most of it is ambient silence —
-        # VAD will discard those frames — but if the user started
-        # speaking just before tapping the hotkey, the prebuffer catches
-        # the first syllable and the popup gets a head start instead of
-        # waiting for new audio to accumulate.
         prebuffer_audio = self.recorder.snapshot()
         if prebuffer_audio is not None and prebuffer_audio.size > 0:
             try:
@@ -247,7 +240,6 @@ class SlumbrApp:
         self._record_started_at = time.monotonic()
         self._elapsed_timer.start()
         self.tray.set_state(State.RECORDING)
-        self.main_window.set_state(State.RECORDING)
         log.debug("toggle->ready %.0fms", (time.monotonic() - t_toggle) * 1000)
 
     def _stop_and_transcribe(self) -> None:
@@ -267,18 +259,10 @@ class SlumbrApp:
             self._reset_to_idle()
             return
 
-        # NOTE: we used to call restore_foreground here as a head start for
-        # DWM, then have paste_text skip its own restore. That broke VS Code
-        # and other Electron targets — if the early call silently fails
-        # (Windows foreground-locking rules), we'd burn input-rights and
-        # the late restore at paste time would also fail. Doing the restore
-        # exactly once, at paste time, is the proven reliable path.
-
         self.popup.show_transcribing()
         self.tray.set_state(State.TRANSCRIBING)
-        self.main_window.set_state(State.TRANSCRIBING)
 
-        self._worker = TranscribeWorker(self.engine, audio)
+        self._worker = TranscribeWorker(self.transcriber, audio)
         self._worker.done.connect(self._on_transcribed)
         self._worker.failed.connect(self._on_transcribe_failed)
         self._worker.finished.connect(self._worker.deleteLater)
@@ -296,16 +280,17 @@ class SlumbrApp:
 
         self.state.try_transition(State.PASTING, force=True)
         log.info("TRANSCRIBING -> PASTING (target hwnd=%s)", self._paste_target_hwnd)
-        # Replace the popup's streaming partial with Whisper's polished
-        # text *before* pasting. Moonshine is less accurate than Whisper,
-        # so without this the popup ends on a wrong guess while the
-        # target window receives the correct paste — visually disorienting.
-        # All chars render as committed (full opacity); the existing per-
-        # char fade smoothly retargets without flashing.
         self.popup.set_partial(polished, "")
         self.tray.set_state(State.PASTING)
-        self.main_window.set_state(State.PASTING)
-        self.main_window.set_last_transcript(polished)
+
+        # Persist to history before pasting — if paste fails the user
+        # can still find what they said in Settings → History.
+        try:
+            history.append(polished)
+        except Exception as e:  # noqa: BLE001
+            log.warning("history.append failed: %s", e)
+        self.tray.refresh_menu()
+
         t_paste_start = time.monotonic()
         try:
             paste_text(
@@ -318,8 +303,6 @@ class SlumbrApp:
         except Exception as e:  # noqa: BLE001
             log.error("paste failed: %s", e)
         t_end = time.monotonic()
-        # Pipeline timing summary: each segment in ms, plus end-to-end
-        # from the user releasing Caps Lock to text in the target window.
         log.info(
             "timing: stop->transcribed %.0fms transcribed->paste %.0fms paste %.0fms total %.0fms",
             (t_done - self._t_stop_pressed) * 1000,
@@ -338,49 +321,55 @@ class SlumbrApp:
         log.debug("-> IDLE")
         self.popup.hide_popup()
         self.tray.set_state(State.IDLE)
-        self.main_window.set_state(State.IDLE)
 
     def _update_elapsed(self) -> None:
         elapsed = time.monotonic() - self._record_started_at
         self.popup.set_elapsed(elapsed)
 
     # ------------------------------------------------------------ settings
+
+    def _ensure_settings_dialog(self) -> SettingsDialog:
+        if self._settings_dialog is None:
+            self._settings_dialog = SettingsDialog(
+                config=self.config,
+                on_config_changed=self._on_config_changed,
+                on_hotkey_changed=self._on_hotkey_changed,
+                on_quit=self._on_quit,
+                app_icon=self._app_icon,
+            )
+        return self._settings_dialog
+
     def _on_open_settings(self) -> None:
-        # Tray "Settings…" routes to the hub's Voice panel.
-        self._on_show_main_window()
-        self.main_window.jump_to_voice()
+        dlg = self._ensure_settings_dialog()
+        dlg.show()
+        dlg.raise_()
+        dlg.activateWindow()
 
     def _on_config_changed(self) -> None:
-        """Hub panels (Voice / Behavior / Shortcuts close-to-tray) call this
-        whenever the user changes anything. Persist + apply hot-tunable knobs.
+        """Settings tabs call this whenever the user changes anything.
+        Persist + apply the hot-tunable knobs (language, initial prompt,
+        mic device). Engine/model changes are persisted but only apply
+        after a restart — that's the Engine tab's notice to the user.
         """
         try:
             self.config.save()
         except Exception as e:  # noqa: BLE001
             log.warning("could not save config: %s", e)
-        # AudioRecorder picks up device on the next `start()`.
+        # AudioRecorder picks up device on the next ``start()``.
         self.recorder.set_device(self.config.input_device_name)
-        # Push language / initial_prompt into the engine so the very next
-        # transcribe sees them — no model reload.
-        self.engine.set_runtime_config(
-            language=self.config.language or None,
-            initial_prompt=self.config.initial_prompt,
-        )
+        # Push hot-tunable knobs into the live transcriber.
+        try:
+            self.transcriber.set_runtime_config(
+                language=self.config.language or None,
+                initial_prompt=self.config.initial_prompt,
+            )
+        except Exception as e:  # noqa: BLE001
+            log.warning("transcriber.set_runtime_config failed: %s", e)
 
     def _on_hotkey_changed(self, vk: int) -> None:
         log.info("hotkey rebound to %s (vk=%#x)", vk_label(vk), vk)
         self.hotkey.set_vk(vk)
         self.tray.set_hotkey_label(vk_label(vk))
-
-    # -------------------------------------------------------- main window
-    def _on_show_main_window(self) -> None:
-        # The window may have been hidden via close-to-tray. show() alone
-        # doesn't beat the taskbar order when another app is foreground, so
-        # also restore + activate + raise.
-        self.main_window.show()
-        self.main_window.setWindowState(self.main_window.windowState() & ~Qt.WindowMinimized)
-        self.main_window.raise_()
-        self.main_window.activateWindow()
 
     # ------------------------------------------------------------------ exit
     def _on_quit(self) -> None:
@@ -396,6 +385,10 @@ class SlumbrApp:
             pass
         try:
             self.streaming_engine.shutdown()
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            self.transcriber.close()
         except Exception:  # noqa: BLE001
             pass
         self.tray.stop()

@@ -11,14 +11,15 @@ from __future__ import annotations
 import numpy as np
 from PySide6.QtCore import QThread, Signal
 
-from .engine import TranscriptionError, WhisperEngine
+from .engine import TranscriptionError
+from .protocol import Transcriber
 
 
 class TranscribeWorker(QThread):
     done = Signal(str)
     failed = Signal(str)
 
-    def __init__(self, engine: WhisperEngine, audio: np.ndarray) -> None:
+    def __init__(self, engine: Transcriber, audio: np.ndarray) -> None:
         super().__init__()
         self._engine = engine
         self._audio = audio
