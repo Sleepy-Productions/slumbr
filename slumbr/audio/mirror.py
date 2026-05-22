@@ -57,29 +57,75 @@ _VIRTUAL_CABLE_KEYWORDS: tuple[str, ...] = (
 )
 
 
+# Windows audio host APIs, ranked. WASAPI is the modern shared-mode API
+# (lowest overhead, what new apps use), DirectSound the older but still
+# decent option, MME the ancient one that also truncates names at 31
+# chars. We skip MME entirely because its truncated names confuse the
+# dropdown ("CABLE Input (VB-Audio Virtual C") and look like distinct
+# devices when they're not.
+_HOST_API_PRIORITY: dict[str, int] = {
+    "Windows WASAPI": 0,
+    "Windows DirectSound": 1,
+    "Windows WDM-KS": 2,
+    "MME": 99,  # excluded — see filter below
+}
+
+
 def find_virtual_cables() -> list[tuple[int, str]]:
     """Scan sounddevice for output devices whose names suggest virtual
     cables. Returns ``[(device_index, device_name), …]`` ordered by
-    preference (VB-Cable first if present).
+    preference (canonical VB-Cable on WASAPI first if present).
 
     Empty list = the user hasn't installed any virtual-audio software.
-    The Settings UI surfaces that state with a help link.
+    The Settings UI surfaces that state with the auto-install button.
+
+    Sounddevice enumerates the same physical device once per host API
+    (MME / DirectSound / WASAPI), so a single VB-Cable install yields
+    3+ device entries. We dedupe by *normalized* name and keep only
+    the highest-priority host's entry for each. MME entries are
+    excluded entirely because they truncate names at 31 chars and
+    would look like distinct devices.
     """
-    out: list[tuple[int, str, int]] = []  # index, name, priority
+    seen_names: set[str] = set()
+    candidates: list[tuple[int, str, int, int]] = []  # idx, name, kw_prio, host_prio
     try:
         for i, d in enumerate(sd.query_devices()):
             if int(d.get("max_output_channels", 0)) <= 0:
                 continue
-            name = str(d.get("name", ""))
+            name = str(d.get("name", "")).strip()
+            if not name:
+                continue
             name_lc = name.lower()
-            for prio, kw in enumerate(_VIRTUAL_CABLE_KEYWORDS):
+            kw_prio: int | None = None
+            for j, kw in enumerate(_VIRTUAL_CABLE_KEYWORDS):
                 if kw in name_lc:
-                    out.append((i, name, prio))
+                    kw_prio = j
                     break
+            if kw_prio is None:
+                continue
+            try:
+                hostapi_name = sd.query_hostapis(d.get("hostapi", 0))["name"]
+            except (KeyError, IndexError):
+                hostapi_name = ""
+            host_prio = _HOST_API_PRIORITY.get(hostapi_name, 50)
+            if host_prio >= 99:
+                continue  # skip MME and unknowns
+            candidates.append((i, name, kw_prio, host_prio))
     except Exception as e:  # noqa: BLE001
         log.warning("sounddevice query for virtual cables failed: %s", e)
-    out.sort(key=lambda t: t[2])
-    return [(idx, name) for idx, name, _ in out]
+
+    # Sort by keyword priority first (canonical "CABLE Input" wins over
+    # 16ch variant), then host-API priority (WASAPI wins over DSound).
+    candidates.sort(key=lambda t: (t[2], t[3]))
+
+    # Dedupe by name — keep the first (= highest-priority) occurrence.
+    out: list[tuple[int, str]] = []
+    for idx, name, _, _ in candidates:
+        if name in seen_names:
+            continue
+        seen_names.add(name)
+        out.append((idx, name))
+    return out
 
 
 class MicMirror:
