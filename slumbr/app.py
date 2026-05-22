@@ -43,6 +43,7 @@ from PySide6.QtWidgets import QApplication, QDialog
 
 from . import history
 from .audio.capture import SAMPLE_RATE, AudioRecorder
+from .audio.mirror import MicMirror
 from .config import SlumbrConfig
 from .input.foreground import ForegroundTracker
 from .input.hotkey import Hotkey
@@ -182,6 +183,14 @@ class SlumbrApp:
         if self.config.reverse_ptt_enabled and self.config.reverse_ptt_vk:
             self.mute_key.arm(self.config.reverse_ptt_vk)
 
+        # ----- Virtual mic routing — universal reverse-PTT path. When
+        # active, Slumbr passes the real mic to a virtual cable device
+        # that call apps read from. The cable is fed silence during
+        # dictation so other apps hear nothing while Slumbr's own
+        # capture stream keeps producing transcripts.
+        self.mic_mirror: MicMirror | None = None
+        self._try_open_mic_mirror()
+
         # ----- Settings dialog is built lazily on first open so startup
         # doesn't pay the cost for users who never touch it.
         self._settings_dialog: SettingsDialog | None = None
@@ -193,7 +202,14 @@ class SlumbrApp:
 
     # ------------------------------------------------------- audio chunk hop
     def _on_audio_thread_chunk(self, samples: np.ndarray) -> None:
-        # Called on PortAudio thread. Marshal onto Qt main thread.
+        # Called on PortAudio input thread.
+        # 1) Forward to the virtual-mic mirror synchronously — the
+        #    OutputStream write is brief and this path has to stay
+        #    low-latency so other call apps don't lag the user.
+        if self.mic_mirror is not None:
+            self.mic_mirror.push(samples)
+        # 2) Marshal a copy onto the Qt main thread for the popup
+        #    visualizer + streaming-engine partials.
         self.bridge.audio_chunk.emit(samples.copy())
 
     def _on_audio_chunk(self, samples) -> None:
@@ -234,6 +250,11 @@ class SlumbrApp:
         # Send the reverse-PTT mute key (e.g. Discord's PTM keybind)
         # BEFORE we start capture so the other app silences us in time.
         self.mute_key.press()
+        # Same for the virtual-mic mirror: cut the passthrough so call
+        # apps reading the virtual cable hear silence while Slumbr
+        # records normally.
+        if self.mic_mirror is not None:
+            self.mic_mirror.set_muted(True)
         self.popup.show_recording()
         try:
             self.recorder.start()
@@ -333,6 +354,11 @@ class SlumbrApp:
         # Release the reverse-PTT mute key so the call app un-mutes
         # the user. Idempotent: no-op if disarmed or not held.
         self.mute_key.release()
+        # Re-open the virtual-mic passthrough so call apps hear the
+        # user again. Idempotent: no-op when the mirror is disabled
+        # or already unmuted.
+        if self.mic_mirror is not None:
+            self.mic_mirror.set_muted(False)
         self.popup.hide_popup()
         self.tray.set_state(State.IDLE)
 
@@ -384,6 +410,57 @@ class SlumbrApp:
             self.mute_key.arm(self.config.reverse_ptt_vk)
         else:
             self.mute_key.disarm()
+        # Reconcile the virtual-mic mirror with the current settings —
+        # hot-start, hot-stop, or hot-swap-device without restart.
+        self._reconcile_mic_mirror()
+
+    # ----------------------------------------------------- mic mirror
+
+    def _try_open_mic_mirror(self) -> None:
+        """Open the virtual-mic mirror per the current config, if any."""
+        if not self.config.mic_routing_enabled or not self.config.mic_routing_device_name:
+            return
+        try:
+            self.mic_mirror = MicMirror(
+                self.config.mic_routing_device_name,
+                samplerate=SAMPLE_RATE,
+                channels=1,
+            )
+            self.mic_mirror.start()
+        except Exception as e:  # noqa: BLE001
+            log.warning(
+                "could not open mic mirror for %r (%s); routing disabled until next "
+                "config change",
+                self.config.mic_routing_device_name, e,
+            )
+            self.mic_mirror = None
+
+    def _reconcile_mic_mirror(self) -> None:
+        """Hot-reconcile the running mirror with the current config.
+
+        Three transitions to handle:
+          - disabled → enabled : open + start a new mirror
+          - enabled → disabled : stop + drop the current mirror
+          - device changed     : stop the old mirror, open a new one
+        """
+        desired_on = bool(self.config.mic_routing_enabled and self.config.mic_routing_device_name)
+
+        if not desired_on:
+            if self.mic_mirror is not None:
+                self.mic_mirror.stop()
+                self.mic_mirror = None
+            return
+
+        # desired_on == True from here.
+        cur_device = (
+            getattr(self.mic_mirror, "_device", None) if self.mic_mirror is not None else None
+        )
+        if self.mic_mirror is not None and cur_device == self.config.mic_routing_device_name:
+            return  # already running on the right device
+        if self.mic_mirror is not None:
+            self.mic_mirror.stop()
+            self.mic_mirror = None
+        self._try_open_mic_mirror()
 
     def _on_hotkey_changed(self, vk: int) -> None:
         log.info("hotkey rebound to %s (vk=%#x)", vk_label(vk), vk)
@@ -397,6 +474,13 @@ class SlumbrApp:
         # key still virtually held (would leave the user muted in
         # their call until they manually pressed it themselves).
         self.mute_key.release()
+        # Same for the mirror: a quit-during-RECORDING would leave the
+        # cable feeding silence to call apps forever; un-mute and stop
+        # cleanly.
+        if self.mic_mirror is not None:
+            self.mic_mirror.set_muted(False)
+            self.mic_mirror.stop()
+            self.mic_mirror = None
         self.hotkey.stop()
         self.foreground.stop()
         if self.recorder.is_recording():
