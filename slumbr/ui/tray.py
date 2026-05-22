@@ -3,9 +3,15 @@
 Provides:
 - A violet-toned dot icon whose color reflects the current state
   (gray = idle, primary violet = recording, deep violet = transcribing/pasting).
-- A right-click menu: Toggle Recording / Settings / Quit.
+- A right-click menu: ``Last: …`` (non-clickable header), Toggle Recording,
+  Settings, Quit.
 
-pystray runs its own event loop in a dedicated thread (`run_detached`).
+There is intentionally no "Show Slumbr" entry — the May 2026 rearch
+deleted the hub window and the only places left to interact with Slumbr
+are the popup (during dictation) and the Settings dialog (right-click →
+Settings…).
+
+pystray runs its own event loop in a dedicated thread (``run_detached``).
 Menu callbacks fire on the pystray thread — *do not* touch Qt widgets
 from them. The app wires them through a Qt signal so they land on the
 main thread.
@@ -18,6 +24,7 @@ from collections.abc import Callable
 import pystray
 from PIL import Image, ImageDraw
 
+from .. import history
 from ..state import State
 from ..theme import (
     COLOR_IDLE,
@@ -35,28 +42,40 @@ _STATE_COLORS: dict[State, str] = {
     State.PASTING: COLOR_PASTING,
 }
 
+_LAST_TRANSCRIPT_MAX = 60
+
 
 def _icon_image(color: str) -> Image.Image:
     img = Image.new("RGBA", (_ICON_SIZE, _ICON_SIZE), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
-    # Outer subtle halo at low alpha (visible against light AND dark taskbars).
     halo = tuple(int(color[i : i + 2], 16) for i in (1, 3, 5)) + (90,)
     d.ellipse((0, 0, _ICON_SIZE, _ICON_SIZE), fill=halo)
     d.ellipse((6, 6, _ICON_SIZE - 6, _ICON_SIZE - 6), fill=color)
     return img
 
 
+def _last_transcript_label() -> str:
+    """Compact 'Last: …' for the tray header. Called lazily by pystray
+    each time the menu opens, so it always reflects the freshest entry.
+    """
+    text = history.latest()
+    if not text:
+        return "Last: —"
+    snippet = text.replace("\n", " ").strip()
+    if len(snippet) > _LAST_TRANSCRIPT_MAX:
+        snippet = snippet[: _LAST_TRANSCRIPT_MAX - 1] + "…"
+    return f"Last: {snippet}"
+
+
 class SlumbrTray:
     def __init__(
         self,
         on_toggle: Callable[[], None],
-        on_show_window: Callable[[], None],
         on_settings: Callable[[], None],
         on_quit: Callable[[], None],
         hotkey_label: str = "Caps Lock",
     ) -> None:
         self._on_toggle = on_toggle
-        self._on_show_window = on_show_window
         self._on_settings = on_settings
         self._on_quit = on_quit
         self._icon: pystray.Icon | None = None
@@ -64,7 +83,6 @@ class SlumbrTray:
         self._hotkey_label = hotkey_label
 
     def set_hotkey_label(self, label: str) -> None:
-        """Update the tray tooltip when the hotkey is rebound from the hub."""
         self._hotkey_label = label
         if self._icon is not None:
             self._icon.title = self._title_for_state(self._state)
@@ -75,22 +93,29 @@ class SlumbrTray:
         return f"Slumbr — {state.value.capitalize()}"
 
     def _build_menu(self) -> pystray.Menu:
-        # Default item (bold, fires on left-click) is "Show Slumbr" — that
-        # matches Windows convention where left-clicking a tray icon opens
-        # the app, while right-click is the full menu including Toggle.
+        # The 'Last: …' header is enabled=False so it renders greyed-out
+        # and doesn't fire on click. pystray re-invokes the lambda each
+        # time the menu opens, so the snippet stays fresh.
         return pystray.Menu(
             pystray.MenuItem(
-                "Show Slumbr",
-                lambda _icon, _item: self._on_show_window(),
-                default=True,
+                lambda _item: _last_transcript_label(),
+                None,
+                enabled=False,
             ),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem(
-                "Toggle Recording", lambda _icon, _item: self._on_toggle()
+                "Toggle Recording",
+                lambda _icon, _item: self._on_toggle(),
+                default=True,
             ),
-            pystray.MenuItem("Settings…", lambda _icon, _item: self._on_settings()),
+            pystray.MenuItem(
+                "Settings…",
+                lambda _icon, _item: self._on_settings(),
+            ),
             pystray.Menu.SEPARATOR,
-            pystray.MenuItem("Quit Slumbr", lambda _icon, _item: self._on_quit()),
+            pystray.MenuItem(
+                "Quit Slumbr", lambda _icon, _item: self._on_quit()
+            ),
         )
 
     def start(self) -> None:
@@ -111,6 +136,14 @@ class SlumbrTray:
             return
         self._icon.icon = _icon_image(_STATE_COLORS[state])
         self._icon.title = self._title_for_state(state)
+
+    def refresh_menu(self) -> None:
+        """Force pystray to repaint the menu (e.g. after a fresh transcript
+        so the 'Last:' header reflects it without waiting for the user to
+        reopen the menu).
+        """
+        if self._icon is not None:
+            self._icon.update_menu()
 
     def stop(self) -> None:
         if self._icon is not None:

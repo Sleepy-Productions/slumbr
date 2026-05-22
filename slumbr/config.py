@@ -1,18 +1,26 @@
 """Slumbr persistent settings.
 
-Stored at `%APPDATA%\\Slumbr\\config.json`. Loaded into a `SlumbrConfig`
+Stored at ``%APPDATA%\\Slumbr\\config.json``. Loaded into a ``SlumbrConfig``
 dataclass at startup; the Settings dialog mutates the instance and calls
-`save()` on OK.
+``save()`` on OK.
 
 Persistence hardening (per the design doc):
-- **Atomic writes:** write to `config.json.tmp`, then `os.replace()` onto
-  `config.json`. We never leave a half-written file on disk.
+- **Atomic writes:** write to ``config.json.tmp``, then ``os.replace()`` onto
+  ``config.json``. We never leave a half-written file on disk.
 - **Schema-tolerant load:** unknown keys are ignored, missing keys fall
   back to defaults — so adding a setting in a later version doesn't break
   reading old files, and reading newer files in older code still works.
 - **Self-healing:** if the file is missing, empty, or malformed JSON, we
   log a warning, back the bad file up with a timestamp suffix, and write
   a fresh default. Never crash at startup over a bad config.
+
+Schema (May 2026 rearch):
+- ``backend: BackendConfig | None`` selects the STT engine and its
+  model/precision. ``None`` means "the first-launch wizard hasn't run
+  yet" — ``app.py`` runs the wizard before constructing any engine.
+- Legacy top-level ``model_size`` + ``compute_type`` keys (pre-rearch)
+  are auto-migrated into a ``BackendConfig(name='cuda_ct2', ...)`` on
+  load so users coming from v0.1.0 don't see the wizard.
 """
 
 from __future__ import annotations
@@ -22,7 +30,7 @@ import logging
 import os
 import shutil
 import time
-from dataclasses import asdict, dataclass, fields
+from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 from typing import Any
 
@@ -41,93 +49,109 @@ CONFIG_DIR = _config_dir()
 CONFIG_PATH = CONFIG_DIR / "config.json"
 
 
+# ---------------------------------------------------------------- backend
+
+
+@dataclass
+class BackendConfig:
+    """Engine selection + per-backend tuning.
+
+    ``name`` is the discriminator the factory dispatches on:
+      - ``cuda_ct2``        → faster-whisper / CTranslate2 (NVIDIA)
+      - ``directml``        → ONNX Runtime DirectML (AMD/Intel; Phase 2)
+      - ``whispercpp_sycl`` → whisper.cpp Intel SYCL build (Phase 2)
+      - ``whispercpp_cpu``  → whisper.cpp CPU build (Phase 2 fallback)
+      - ``moonshine``       → sherpa-onnx Moonshine offline (CPU primary)
+
+    ``model`` is backend-specific (e.g. ``"large-v3-turbo"`` for ct2,
+    ``"moonshine-base-en-int8"`` for moonshine, ``"small.en-q5_k_m"``
+    for whisper.cpp). The factory + adapter know what to do with it.
+    """
+
+    name: str
+    model: str
+    compute_type: str | None = None    # ct2 only
+    threads: int | None = None         # whispercpp / moonshine CPU thread count
+    device_index: int = 0              # multi-GPU systems
+    extra: dict[str, Any] = field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> BackendConfig:
+        known = {f.name for f in fields(cls)}
+        kwargs = {k: v for k, v in data.items() if k in known}
+        # Defensive: 'extra' must be a dict if present.
+        if "extra" in kwargs and not isinstance(kwargs["extra"], dict):
+            kwargs["extra"] = {}
+        return cls(**kwargs)
+
+
+# ---------------------------------------------------------------- slumbr
+
+
 @dataclass
 class SlumbrConfig:
-    # Mic input — sounddevice device name substring or numeric index, or
-    # None to use the system default. We store the *name* by default so
-    # the choice survives the device-index reshuffle that happens on
-    # USB-mic hot-plug.
-    input_device_name: str | None = None
+    # ----- STT backend (None = wizard hasn't run yet) -----
+    backend: BackendConfig | None = None
 
-    # Reserved for follow-up turns — wired through but not yet UI-bound.
+    # ----- Mic + paste -----
+    input_device_name: str | None = None
     auto_send: bool = False
     preserve_clipboard: bool = True
-    accent_color: str = "#9B6FE0"  # Infinity Board violet[3]
+    accent_color: str = "#9B6FE0"  # Sleepy Productions violet
+    paste_method: str = "ctrl_v"   # "ctrl_v" | "ctrl_shift_v" | "type"
 
-    # How transcribed text is sent into the focused window.
-    # - "ctrl_v"        : clipboard + Ctrl+V. Fastest. Works for chats,
-    #                     browsers, editors. Does NOT work in most
-    #                     terminals (Ctrl+V is a literal-char prefix).
-    # - "ctrl_shift_v"  : clipboard + Ctrl+Shift+V. Required for VS Code's
-    #                     integrated terminal, Windows Terminal, conhost.
-    #                     Still works in chats/browsers (they treat it as
-    #                     "paste as plain text", which is what we have).
-    # - "type"          : type each character. Universal — works anywhere
-    #                     keystrokes land. Slower for long messages and
-    #                     bypasses the clipboard entirely.
-    paste_method: str = "ctrl_v"
-
-    # Global dictation hotkey. Stored as a raw Windows Virtual-Key code so
-    # we don't have to maintain a name<->code table — the UI picker writes
-    # the int directly. Default 0x14 = Caps Lock.
+    # ----- Hotkey -----
+    # Stored as the raw Windows VK code. Default 0x14 = Caps Lock.
     hotkey_vk: int = 0x14
 
-    # ASR config. Two knobs that make the biggest difference for accuracy
-    # on uncommon words:
-    #
-    # - `language`: pinning to "en" skips Whisper's auto-detect (saves
-    #   ~50 ms per utterance) and avoids the rare case where short
-    #   utterances get mis-routed to e.g. Welsh or Dutch and decode badly.
-    #   Set to "" if you want to dictate in multiple languages.
-    # - `initial_prompt`: a free-form hint string passed to Whisper as
-    #   prior-context. The decoder is heavily biased toward words that
-    #   appear here, so listing proper nouns / technical terms / slang
-    #   that matter to you dramatically reduces miss-rate on those words.
-    #   Keep it under ~200 tokens; Whisper truncates longer prompts.
+    # ----- ASR hot-tunable knobs -----
     language: str = "en"
     initial_prompt: str = ""
 
-    # Whisper model size + numeric precision. Both load-time only — changes
-    # take effect on the next app restart, since faster-whisper can't
-    # hot-swap a model.
-    #
-    # - "large-v3"        : most accurate. ~3 GB. Best for rare words.
-    # - "large-v3-turbo"  : distilled v3, faster, slightly less accurate.
-    # - "distil-large-v3" : middle ground.
-    # - "medium" / "small": progressively smaller and worse, only if VRAM
-    #                       is constrained.
-    #
-    # `compute_type` controls precision on the GPU:
-    # - "int8_float16"   : INT8 weights with FP16 activations. Best
-    #                       accuracy/speed trade on modern Nvidia.
-    # - "int8"           : pure INT8. Smallest VRAM, slight accuracy hit.
-    # - "float16"        : full FP16. Best accuracy, largest VRAM.
-    model_size: str = "large-v3-turbo"
-    compute_type: str = "int8_float16"
-
-    # Experimental: alongside Moonshine + LA-2 (which owns committed
-    # text), run a sherpa-onnx streaming Zipformer to drive the
-    # uncommitted tail chars in the popup. Faster token emission (~50 ms
-    # vs Moonshine's ~200 ms cadence) but the only available English
-    # streaming Zipformer is LibriSpeech-trained, so the visual tail can
-    # be wrong on conversational speech. Off by default until A/B'd
-    # subjectively.
+    # ----- Streaming engine experiment toggle -----
     streaming_visual_leading_edge: bool = False
 
-    # Main-window close behavior. True = minimize to tray on close (user can
-    # quit explicitly from the tray menu or the in-window Quit button).
-    # False = closing the window exits the app entirely.
+    # ----- Window close policy (vestigial — the hub window is gone in
+    # the May 2026 rearch, but the field remains so older configs load
+    # cleanly and downstream code can read it without KeyError).
     close_to_tray: bool = True
-    # When False, the next window-close shows a one-time dialog asking the
-    # user to pick close-to-tray vs quit, then flips this to True.
-    close_choice_made: bool = False
+    close_choice_made: bool = True
 
     # ---------------------------------------------------------- (de)serialize
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> SlumbrConfig:
-        """Tolerant constructor: ignores unknown keys, defaults missing ones."""
+        """Tolerant constructor with legacy-schema migration.
+
+        Pre-rearch configs had top-level ``model_size`` / ``compute_type``
+        fields. We rebuild a ``BackendConfig(name='cuda_ct2', ...)``
+        from those so legacy users skip the first-launch wizard.
+        """
         known = {f.name for f in fields(cls)}
-        kwargs = {k: v for k, v in data.items() if k in known}
+        kwargs: dict[str, Any] = {k: v for k, v in data.items() if k in known}
+
+        # ----- backend field
+        raw_backend = data.get("backend")
+        if isinstance(raw_backend, dict):
+            try:
+                kwargs["backend"] = BackendConfig.from_dict(raw_backend)
+            except (TypeError, KeyError) as e:
+                log.warning("backend block malformed (%s) — wizard will re-prompt", e)
+                kwargs["backend"] = None
+
+        # ----- legacy migration: model_size + compute_type at top level
+        if kwargs.get("backend") is None and "model_size" in data:
+            legacy_model = str(data.get("model_size") or "large-v3-turbo")
+            legacy_ct = str(data.get("compute_type") or "int8_float16")
+            log.info(
+                "migrating legacy config to BackendConfig(cuda_ct2, %s, %s)",
+                legacy_model, legacy_ct,
+            )
+            kwargs["backend"] = BackendConfig(
+                name="cuda_ct2",
+                model=legacy_model,
+                compute_type=legacy_ct,
+            )
+
         return cls(**kwargs)
 
     def to_dict(self) -> dict[str, Any]:
