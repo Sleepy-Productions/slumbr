@@ -507,6 +507,15 @@ class RecordingPopup(QWidget):
         #   - target size used by the collapse / expand animation
         self._compact = False
 
+        # Cursor-follow: while the popup is visible (RECORDING /
+        # TRANSCRIBING) it tracks the user's mouse at ~60 Hz so it
+        # stays anchored above-right of wherever the cursor is now.
+        # Paused during the resize animation so the bottom-anchor
+        # math in ``_resize_tick`` doesn't fight the follow updates.
+        self._follow_timer = QTimer(self)
+        self._follow_timer.setInterval(16)
+        self._follow_timer.timeout.connect(self._follow_tick)
+
         # Smooth resize animation state. The popup eases between compact
         # and expanded shapes over `_RESIZE_DURATION_S` with an ease-out
         # cubic, so first-text and end-of-utterance feel like the popup
@@ -596,6 +605,7 @@ class RecordingPopup(QWidget):
         self._reposition()
         self.show()
         self.raise_()
+        self._follow_timer.start()
 
     def show_transcribing(self) -> None:
         self._dot.set_color(COLOR_TRANSCRIBING)
@@ -606,6 +616,8 @@ class RecordingPopup(QWidget):
         self._reposition()
         self.show()
         self.raise_()
+        # Idempotent — keeps following through the brief transcribe phase.
+        self._follow_timer.start()
 
     def push_samples(self, samples: np.ndarray) -> None:
         self._visualizer.push_samples(samples)
@@ -638,8 +650,24 @@ class RecordingPopup(QWidget):
 
     def hide_popup(self) -> None:
         self._visualizer.stop()
+        self._follow_timer.stop()
         self._collapse_partial()
         self.hide()
+
+    def _follow_tick(self) -> None:
+        """Re-anchor the popup to the cursor every 16 ms while visible.
+
+        Skipped during the resize animation — that path owns the popup
+        position momentarily (bottom-anchoring as it grows upward) and
+        a follow update mid-resize would fight the bottom-anchor math.
+        Resize windows are brief (~250 ms), so the user feels a slight
+        pause in follow during partial-text expansion — acceptable.
+        """
+        if not self.isVisible():
+            return
+        if self._resize_timer.isActive():
+            return
+        self._reposition()
 
     def set_compact(self, compact: bool) -> None:
         """Toggle the just-the-bars compact look.
