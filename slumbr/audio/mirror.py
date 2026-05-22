@@ -57,18 +57,34 @@ _VIRTUAL_CABLE_KEYWORDS: tuple[str, ...] = (
 )
 
 
-# Windows audio host APIs, ranked. WASAPI is the modern shared-mode API
-# (lowest overhead, what new apps use), DirectSound the older but still
-# decent option, MME the ancient one that also truncates names at 31
-# chars. We skip MME entirely because its truncated names confuse the
-# dropdown ("CABLE Input (VB-Audio Virtual C") and look like distinct
-# devices when they're not.
-_HOST_API_PRIORITY: dict[str, int] = {
+# Windows audio host APIs ranked per direction.
+#
+# For OUTPUT (MicMirror writing to virtual cable): prefer WASAPI for
+# lowest latency. MME is excluded because its 31-char name truncation
+# confuses the dropdown UI.
+#
+# For INPUT (AudioRecorder reading mic): prefer DirectSound + MME
+# because they go through Windows's kernel mixer which transparently
+# resamples between Slumbr's requested 16 kHz mono and whatever the
+# device's hardware mix format is. WASAPI shared mode rejects a
+# 16 kHz mono request on devices whose mix format is fixed at e.g.
+# 192 kHz stereo (HyperX QuadCast 2 S) with paInvalidDevice [-9996].
+_OUTPUT_HOST_API_PRIORITY: dict[str, int] = {
     "Windows WASAPI": 0,
     "Windows DirectSound": 1,
     "Windows WDM-KS": 2,
-    "MME": 99,  # excluded — see filter below
+    "MME": 99,  # excluded — truncated names confuse the dropdown
 }
+_INPUT_HOST_API_PRIORITY: dict[str, int] = {
+    "Windows DirectSound": 0,
+    "MME": 1,
+    "Windows WDM-KS": 2,
+    "Windows WASAPI": 3,  # last — strict mix-format check
+}
+# Back-compat alias for callers that imported the old single map
+# (find_virtual_cables uses output priorities since it only looks at
+# output devices).
+_HOST_API_PRIORITY = _OUTPUT_HOST_API_PRIORITY
 
 
 def find_virtual_cables() -> list[tuple[int, str]]:
@@ -128,6 +144,66 @@ def find_virtual_cables() -> list[tuple[int, str]]:
     return out
 
 
+def resolve_device_index(name: str, *, want_input: bool = False) -> int | None:
+    """Return the device index whose name matches ``name`` exactly,
+    preferring WASAPI > DirectSound > WDM-KS over (excluded) MME.
+
+    sounddevice rejects ambiguous-by-name device lookups when the same
+    name exists across host APIs — and VB-Cable's "CABLE Input" /
+    "CABLE Output" each appear under three of them. This helper
+    resolves to a specific index so callers can pass an unambiguous
+    device id to ``sd.InputStream`` / ``sd.OutputStream``.
+
+    Also tolerates MME's 31-char name truncation: if no full-name match
+    exists in higher-priority host APIs, fall back to any device whose
+    name *starts with* the given prefix (truncated entries on top of
+    a full-name WASAPI device).
+
+    ``want_input=True`` looks for input devices (max_input_channels > 0);
+    default False looks for output devices.
+    """
+    target = name.strip()
+    field = "max_input_channels" if want_input else "max_output_channels"
+    priority_map = (
+        _INPUT_HOST_API_PRIORITY if want_input else _OUTPUT_HOST_API_PRIORITY
+    )
+    candidates: list[tuple[int, int]] = []  # (idx, host_prio)
+    fallback: list[tuple[int, int]] = []    # truncation-tolerant fallback
+
+    try:
+        devices = list(sd.query_devices())
+    except Exception as e:  # noqa: BLE001
+        log.warning("sd.query_devices in resolve_device_index failed: %s", e)
+        return None
+
+    for i, d in enumerate(devices):
+        if int(d.get(field, 0)) <= 0:
+            continue
+        dev_name = str(d.get("name", "")).strip()
+        try:
+            hostapi_name = sd.query_hostapis(d.get("hostapi", 0))["name"]
+        except (KeyError, IndexError):
+            hostapi_name = ""
+        host_prio = priority_map.get(hostapi_name, 50)
+        if host_prio >= 99:
+            continue  # skipped host API (MME for outputs)
+        if dev_name == target:
+            candidates.append((i, host_prio))
+        elif dev_name.startswith(target) or target.startswith(dev_name):
+            # Truncation-tolerant fallback (MME truncates at 31 chars
+            # so a saved truncated name needs to match its full-name
+            # counterpart, or vice versa).
+            fallback.append((i, host_prio))
+
+    if candidates:
+        candidates.sort(key=lambda t: t[1])
+        return candidates[0][0]
+    if fallback:
+        fallback.sort(key=lambda t: t[1])
+        return fallback[0][0]
+    return None
+
+
 class MicMirror:
     """Streams mic samples into a virtual cable output device, with a
     boolean ``muted`` gate. All public methods are safe to call from
@@ -149,9 +225,49 @@ class MicMirror:
         samplerate: int = 16000,
         channels: int = 1,
     ) -> None:
-        self._device = output_device
-        self._samplerate = samplerate
-        self._channels = channels
+        # Accept either a device name (resolved to index, preferring
+        # WASAPI) or a raw int index. Storing the resolved int lets us
+        # bypass sounddevice's host-API ambiguity rejection AND lets
+        # ``_reconcile_mic_mirror`` compare against the original name
+        # for "device changed" detection.
+        if isinstance(output_device, str):
+            self._device_name = output_device
+            resolved = resolve_device_index(output_device)
+            if resolved is None:
+                raise ValueError(
+                    f"no output device named {output_device!r} found "
+                    "(maybe the virtual cable was uninstalled?)"
+                )
+            self._device: int = resolved
+        else:
+            self._device = int(output_device)
+            self._device_name = ""
+        # ``samplerate`` / ``channels`` are the SOURCE format Slumbr
+        # provides (16 kHz mono). The OUTPUT stream's format is
+        # discovered from the device's preferred mix format — VB-Cable
+        # under WASAPI shared mode only accepts 48 kHz stereo and
+        # rejects anything else with paInvalidDevice. We upsample +
+        # duplicate channels at push() time to match.
+        self._src_samplerate = samplerate
+        try:
+            info = sd.query_devices(self._device)
+            self._dst_samplerate = int(info.get("default_samplerate") or samplerate)
+            dst_ch = int(info.get("max_output_channels", channels))
+            self._dst_channels = max(channels, min(dst_ch, 2))  # cap at stereo
+        except Exception as e:  # noqa: BLE001
+            log.warning(
+                "could not query device %r for native format (%s); using requested",
+                self._device, e,
+            )
+            self._dst_samplerate = samplerate
+            self._dst_channels = channels
+        # Upsampling ratio. WASAPI usually wants 48 kHz, so 48000/16000=3.
+        # Integer-only multiples are fine for cable routing — quality is
+        # downstream of the call app's own resampling anyway.
+        if self._dst_samplerate <= self._src_samplerate:
+            self._upsample = 1
+        else:
+            self._upsample = max(1, self._dst_samplerate // self._src_samplerate)
         self._stream: sd.OutputStream | None = None
         # Default to NOT muted: when the user enables routing, their
         # voice should flow into calls normally. Mute happens only
@@ -167,17 +283,22 @@ class MicMirror:
         try:
             self._stream = sd.OutputStream(
                 device=self._device,
-                samplerate=self._samplerate,
-                channels=self._channels,
+                samplerate=self._dst_samplerate,
+                channels=self._dst_channels,
                 dtype="float32",
             )
             self._stream.start()
             log.info(
-                "MicMirror started device=%r samplerate=%d channels=%d",
-                self._device, self._samplerate, self._channels,
+                "MicMirror started device=%d (%r) -> %d Hz %d ch (src %d Hz %d ch, x%d upsample)",
+                self._device, self._device_name or "?",
+                self._dst_samplerate, self._dst_channels,
+                self._src_samplerate, 1, self._upsample,
             )
         except Exception as e:  # noqa: BLE001
-            log.warning("MicMirror open failed for device=%r: %s", self._device, e)
+            log.warning(
+                "MicMirror open failed for device=%d (%r): %s",
+                self._device, self._device_name or "?", e,
+            )
             self._stream = None
             raise
 
@@ -197,21 +318,35 @@ class MicMirror:
         """Forward ``samples`` (or silence, if muted) into the cable.
 
         Called from the PortAudio input thread — must stay fast and
-        must never raise back into the caller.
+        must never raise back into the caller. Adapts 16 kHz mono
+        ``samples`` to the device's native format (typically 48 kHz
+        stereo for VB-Cable) via nearest-neighbor upsampling +
+        channel duplication. Quality "good enough for voice" — the
+        call app does its own resampling on the other side.
         """
         if self._stream is None:
             return
         with self._lock:
             muted = self._muted
+        # 1) Pick source samples (real or silence).
         if muted:
-            # Reuse a single silence buffer of matching shape to avoid
-            # allocating a fresh zero array on every audio chunk
-            # (~50 Hz cadence under default capture settings).
             if self._silence_cache is None or self._silence_cache.shape != samples.shape:
                 self._silence_cache = np.zeros_like(samples)
-            payload = self._silence_cache
+            src = self._silence_cache
         else:
-            payload = samples.astype(np.float32, copy=False)
+            src = samples.astype(np.float32, copy=False)
+        # 2) Flatten to 1-D so upsample + tile produce predictable
+        # shapes regardless of whether ``samples`` came in (N,) or (N,1).
+        if src.ndim > 1:
+            src = src.reshape(-1)
+        # 3) Nearest-neighbor upsample if the device wants a higher rate.
+        if self._upsample > 1:
+            src = np.repeat(src, self._upsample)
+        # 4) Duplicate to stereo if the device wants more channels.
+        if self._dst_channels >= 2:
+            payload = np.column_stack([src] * self._dst_channels).astype(np.float32, copy=False)
+        else:
+            payload = src
         try:
             self._stream.write(payload)
         except sd.PortAudioError as e:

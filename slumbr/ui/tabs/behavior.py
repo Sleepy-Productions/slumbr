@@ -193,8 +193,10 @@ class BehaviorTab(QWidget):
         for _idx, name in self._cables:
             self._cable_combo.addItem(name, userData=name)
         # Select previously-configured cable if it still exists,
-        # otherwise auto-pick the first detected cable so the user
-        # only has to flip the checkbox to enable routing.
+        # otherwise auto-pick the first detected cable AND write it
+        # into config — without the write, ticking the route checkbox
+        # later would leave config.mic_routing_device_name empty and
+        # the mirror would silently never open.
         if config.mic_routing_device_name:
             i = self._cable_combo.findData(config.mic_routing_device_name)
             if i >= 0:
@@ -202,6 +204,7 @@ class BehaviorTab(QWidget):
         elif self._cables:
             # Index 0 is "(none)"; first real cable is at index 1.
             self._cable_combo.setCurrentIndex(1)
+            self._config.mic_routing_device_name = self._cables[0][1]
         self._cable_combo.currentIndexChanged.connect(self._on_cable_changed)
         self._cable_combo.setEnabled(bool(self._cables))
         cable_row.addWidget(self._cable_combo, stretch=1)
