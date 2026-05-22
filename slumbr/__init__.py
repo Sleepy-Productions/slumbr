@@ -17,11 +17,47 @@ the DLL paths first.
 
 from __future__ import annotations
 
+import logging
 import os
 import sys
 from pathlib import Path
 
 __version__ = "0.1.0"
+
+
+def _configure_logging() -> None:
+    """One-time root-logger setup. `--debug` flips Slumbr loggers to DEBUG
+    in `__main__`; chatty third-party libs are pinned to WARNING below so
+    debug mode stays readable instead of being drowned in httpcore / PIL
+    plugin-import / urllib3 noise.
+    """
+    root = logging.getLogger()
+    if root.handlers:
+        return
+    handler = logging.StreamHandler()
+    handler.setFormatter(
+        logging.Formatter(
+            fmt="%(asctime)s %(levelname)-7s %(name)s: %(message)s",
+            datefmt="%H:%M:%S",
+        )
+    )
+    root.addHandler(handler)
+    root.setLevel(logging.INFO)
+    for noisy in (
+        "httpcore",
+        "httpx",
+        "urllib3",
+        "PIL",
+        "PIL.Image",
+        "PIL.PngImagePlugin",
+        "huggingface_hub",
+        "filelock",
+        "asyncio",
+    ):
+        logging.getLogger(noisy).setLevel(logging.WARNING)
+
+
+_configure_logging()
 
 
 def _add_nvidia_dll_dirs() -> None:
@@ -47,4 +83,28 @@ def _add_nvidia_dll_dirs() -> None:
         os.environ["PATH"] = os.pathsep.join(bin_dirs) + os.pathsep + os.environ.get("PATH", "")
 
 
+def _preload_ctranslate2() -> None:
+    """Force CTranslate2's native module to load before anything else.
+
+    Specifically, this MUST happen before PySide6 is imported. PySide6's
+    Windows bootstrap perturbs the DLL search path in a way that breaks
+    CTranslate2's later CUDA DLL resolution: the first `WhisperModel(...)`
+    constructed after `import PySide6` crashes the process natively
+    (exit 5, no Python traceback). Importing `ctranslate2` here resolves
+    cuBLAS/cuDNN into the process up front, so by the time `slumbr.app`
+    imports PySide6, the CUDA DLLs are already mapped and immune to Qt's
+    interference.
+
+    A failed import is non-fatal — the eventual error will surface from
+    `WhisperEngine` instead, where it has user-readable context.
+    """
+    if sys.platform != "win32":
+        return
+    try:
+        import ctranslate2  # noqa: F401
+    except Exception:  # noqa: BLE001
+        pass
+
+
 _add_nvidia_dll_dirs()
+_preload_ctranslate2()
