@@ -17,22 +17,31 @@ backlog item.
 
 from __future__ import annotations
 
-from PySide6.QtCore import QEvent, Qt, Signal
+from PySide6.QtCore import QEvent, Qt, QThread, Signal
 from PySide6.QtGui import QKeyEvent
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
+    QDialog,
     QHBoxLayout,
     QLabel,
+    QPlainTextEdit,
     QPushButton,
     QVBoxLayout,
     QWidget,
 )
 
 from ...audio.mirror import find_virtual_cables
+from ...bootstrap.vbcable import VBCableInstallWorker
 from ...config import SlumbrConfig
 from ...input.keymap import vk_label
-from ...theme import TEXT_SECONDARY, VIOLET_PRIMARY
+from ...theme import (
+    BG_PANEL,
+    BORDER,
+    TEXT_PRIMARY,
+    TEXT_SECONDARY,
+    VIOLET_PRIMARY,
+)
 from ._widgets import field_hint, field_label, heading, scrollable, subheading
 
 
@@ -151,16 +160,21 @@ class BehaviorTab(QWidget):
         else:
             status_dot.setStyleSheet(f"color: {TEXT_SECONDARY}; font-size: 14px;")
             status_text = QLabel(
-                'No virtual cable detected. <a href="https://vb-audio.com/Cable/" '
-                f'style="color: {VIOLET_PRIMARY};">Install VB-Cable</a> '
-                "(free, restart Slumbr after install)."
+                "No virtual cable detected. Slumbr can install VB-Cable for "
+                "you (downloads from vb-audio.com, requires admin + reboot)."
             )
-            status_text.setOpenExternalLinks(True)
-            status_text.setTextInteractionFlags(Qt.TextBrowserInteraction)
         status_text.setWordWrap(True)
         status_row.addWidget(status_dot)
         status_row.addWidget(status_text, stretch=1)
         layout.addLayout(status_row)
+
+        # "Install VB-Cable for me" button (only when nothing is detected).
+        if not self._cables:
+            self._install_btn = QPushButton("Install VB-Cable")
+            self._install_btn.setObjectName("primary")
+            self._install_btn.setMaximumWidth(220)
+            self._install_btn.clicked.connect(self._on_install_vbcable)
+            layout.addWidget(self._install_btn)
 
         self._mic_routing_cb = QCheckBox(
             "Route my mic through a virtual cable"
@@ -219,6 +233,11 @@ class BehaviorTab(QWidget):
         device = self._cable_combo.currentData() or ""
         self._config.mic_routing_device_name = device
         self.config_changed.emit()
+
+    def _on_install_vbcable(self) -> None:
+        """Open the install dialog and kick off the VB-Cable installer."""
+        dlg = _VBCableInstallDialog(self)
+        dlg.exec()
 
 
 class _CaptureKeyButton(QPushButton):
@@ -281,3 +300,98 @@ class _CaptureKeyButton(QPushButton):
         # eating the capture. We forward KeyPress through to the
         # capture path above, but let everything else use defaults.
         return super().event(ev)
+
+
+class _VBCableInstallDialog(QDialog):
+    """Modal progress dialog that runs the VB-Cable installer worker.
+
+    Single-shot: open → install runs → dialog stays open with the
+    success/failure summary and a Close button. We deliberately don't
+    expose mid-install cancel because the elevated installer itself
+    isn't easily killable from outside, and stopping our wait wouldn't
+    actually cancel Windows's driver install.
+    """
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Install VB-Cable")
+        self.setWindowFlag(Qt.WindowContextHelpButtonHint, False)
+        self.setMinimumSize(560, 380)
+        # Inherit the parent's stylesheet so the dialog looks like the
+        # rest of the Settings dialog rather than the system default.
+        self.setStyleSheet(parent.styleSheet() if parent else "")
+
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(28, 26, 28, 24)
+        outer.setSpacing(14)
+
+        title = QLabel("Installing VB-Cable…")
+        tf = title.font()
+        tf.setPointSize(15)
+        tf.setBold(True)
+        title.setFont(tf)
+        self._title = title
+        outer.addWidget(title)
+
+        self._subtitle = QLabel(
+            "Slumbr downloads the official installer from vb-audio.com and runs "
+            "it elevated. Windows will prompt for admin. Click 'Install Driver' "
+            "in the VB-Cable installer when it appears."
+        )
+        self._subtitle.setWordWrap(True)
+        self._subtitle.setStyleSheet(f"color: {TEXT_SECONDARY};")
+        outer.addWidget(self._subtitle)
+
+        self._log = QPlainTextEdit()
+        self._log.setReadOnly(True)
+        self._log.setStyleSheet(
+            f"QPlainTextEdit {{ background: {BG_PANEL}; border: 1px solid {BORDER}; "
+            f"border-radius: 10px; padding: 10px; color: {TEXT_PRIMARY}; "
+            "font-family: Consolas; font-size: 9pt; }}"
+        )
+        outer.addWidget(self._log, stretch=1)
+
+        btn_row = QHBoxLayout()
+        btn_row.addStretch(1)
+        self._close_btn = QPushButton("Close")
+        self._close_btn.clicked.connect(self.accept)
+        self._close_btn.setEnabled(False)
+        btn_row.addWidget(self._close_btn)
+        outer.addLayout(btn_row)
+
+        # Kick off worker.
+        self._thread = QThread(self)
+        self._worker = VBCableInstallWorker()
+        self._worker.moveToThread(self._thread)
+        self._thread.started.connect(self._worker.run)
+        self._worker.progress.connect(self._on_line)
+        self._worker.finished.connect(self._on_finished)
+        self._worker.finished.connect(self._thread.quit)
+        self._worker.finished.connect(self._worker.deleteLater)
+        self._thread.finished.connect(self._thread.deleteLater)
+        self._thread.start()
+
+    def _on_line(self, msg: str) -> None:
+        self._log.appendPlainText(msg)
+        bar = self._log.verticalScrollBar()
+        bar.setValue(bar.maximum())
+
+    def _on_finished(self, success: bool, summary: str) -> None:
+        if success:
+            self._title.setText("VB-Cable installed")
+            self._subtitle.setText(
+                "Reboot Windows now, then re-launch Slumbr. The new cable will "
+                "show up automatically in Settings → Behavior."
+            )
+            self._log.appendPlainText("")
+            self._log.appendPlainText("[ok] " + summary)
+        else:
+            self._title.setText("Install failed")
+            self._subtitle.setText(
+                "Something didn't work. You can retry, or install manually from "
+                "https://vb-audio.com/Cable/."
+            )
+            self._log.appendPlainText("")
+            self._log.appendPlainText("[fail] " + summary)
+        self._close_btn.setEnabled(True)
+        self._close_btn.setText("Done")
