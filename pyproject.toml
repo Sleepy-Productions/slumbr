@@ -9,8 +9,8 @@ description = "Local voice-to-text dictation runner for Windows (offline, Whispe
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.10"
-authors = [{ name = "Slumbr contributors" }]
-keywords = ["speech-to-text", "dictation", "whisper", "voice", "stt", "offline"]
+authors = [{ name = "Sleepy Productions" }]
+keywords = ["speech-to-text", "dictation", "whisper", "voice", "stt", "offline", "windows"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Environment :: Win32 (MS Windows)",
@@ -26,6 +26,7 @@ classifiers = [
 
 dependencies = [
     "faster-whisper==1.2.1",
+    "sherpa-onnx>=1.13",
     "sounddevice==0.3.12",
     "numpy",
     "pynput==1.7.6",
@@ -44,6 +45,12 @@ dev = [
 package = [
     "pyinstaller==6.8.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/SIeepyDev/slumbr"
+Repository = "https://github.com/SIeepyDev/slumbr"
+Issues = "https://github.com/SIeepyDev/slumbr/issues"
+Changelog = "https://github.com/SIeepyDev/slumbr/blob/main/CHANGELOG.md"
 
 [project.scripts]
 slumbr = "slumbr.__main__:main"

@@ -34,10 +34,17 @@ class StateMachine:
         with self._lock:
             return self._state
 
-    def try_transition(self, to: State) -> bool:
+    def try_transition(self, to: State, *, force: bool = False) -> bool:
+        """Move to `to` unless blocked by the user-debounce window.
+
+        `force=True` bypasses the debounce — use it for automatic transitions
+        the orchestrator drives (e.g. PASTING -> IDLE on completion). The
+        debounce exists to absorb hotkey double-taps, not to slow down the
+        state machine's own forward progress.
+        """
         with self._lock:
             now_ms = time.monotonic() * 1000.0
-            if now_ms - self._last_transition_ms < self.DEBOUNCE_MS:
+            if not force and now_ms - self._last_transition_ms < self.DEBOUNCE_MS:
                 return False
             prev = self._state
             self._state = to

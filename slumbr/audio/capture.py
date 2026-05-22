@@ -1,63 +1,135 @@
+"""Mono 16 kHz audio capture with always-on stream and pre-buffer.
+
+Design:
+- The PortAudio `InputStream` is opened on construction and stays open
+  for the lifetime of the recorder. This avoids the ~200 ms WASAPI
+  warm-up that was eating the first words of every utterance — by the
+  time the user taps Caps Lock, the stream has already been capturing
+  silence into a ring buffer.
+- A 500 ms ring buffer keeps the most-recent audio. When `start()` is
+  called we seed the recording chunks from that buffer, so words the
+  user said *before* tapping the hotkey are still in the recording.
+- `on_chunk` only fires while `_saving` is True, so the visualizer
+  doesn't paint on idle audio.
+
+Side effect: the Windows microphone indicator stays lit while Slumbr is
+running, even when idle. We accept that as the price of zero-cutoff.
+"""
+
 from __future__ import annotations
 
+import logging
 import threading
+from collections import deque
+from collections.abc import Callable
 
 import numpy as np
 import sounddevice as sd
+
+log = logging.getLogger(__name__)
 
 SAMPLE_RATE = 16000
 CHANNELS = 1
 DTYPE = "float32"
 BLOCKSIZE = 1024
+PREBUFFER_SECONDS = 0.5
 
 
 class AudioRecorder:
-    """Mono 16 kHz float32 capture via sounddevice (WASAPI on Windows by default).
-
-    `start()` opens an InputStream whose callback appends numpy chunks to an
-    internal buffer. `stop()` closes the stream and returns the concatenated
-    1-D float32 array. Returns `None` if nothing was captured.
-
-    The callback runs on the PortAudio thread — keep it lean. No logging
-    beyond xrun warnings; do not paint or touch UI from here.
-    """
-
-    def __init__(self, samplerate: int = SAMPLE_RATE, channels: int = CHANNELS) -> None:
+    def __init__(
+        self,
+        samplerate: int = SAMPLE_RATE,
+        channels: int = CHANNELS,
+        device: int | str | None = None,
+        on_chunk: Callable[[np.ndarray], None] | None = None,
+        prebuffer_seconds: float = PREBUFFER_SECONDS,
+    ) -> None:
         self.samplerate = samplerate
         self.channels = channels
-        self._stream: sd.InputStream | None = None
+        self.device = device
+        self.on_chunk = on_chunk
+        # +1 because a partially-filled block counts.
+        prebuffer_blocks = int(prebuffer_seconds * samplerate / BLOCKSIZE) + 1
+        self._prebuffer: deque[np.ndarray] = deque(maxlen=prebuffer_blocks)
         self._chunks: list[np.ndarray] = []
+        self._saving = False
         self._lock = threading.Lock()
+        self._stream: sd.InputStream | None = None
+        self._open_stream()
 
-    def _callback(self, indata: np.ndarray, frames: int, time_info, status) -> None:
-        if status:
-            print(f"[audio] xrun/status: {status}")
-        with self._lock:
-            self._chunks.append(indata.copy())
-
-    def start(self) -> None:
+    # -------------------------------------------------------- lifecycle
+    def _open_stream(self) -> None:
         if self._stream is not None:
             return
-        with self._lock:
-            self._chunks = []
-        self._stream = sd.InputStream(
-            samplerate=self.samplerate,
-            channels=self.channels,
-            dtype=DTYPE,
-            blocksize=BLOCKSIZE,
-            callback=self._callback,
-        )
-        self._stream.start()
+        try:
+            self._stream = sd.InputStream(
+                samplerate=self.samplerate,
+                channels=self.channels,
+                dtype=DTYPE,
+                blocksize=BLOCKSIZE,
+                device=self.device,
+                callback=self._callback,
+            )
+            self._stream.start()
+            log.info("stream open (device=%r)", self.device)
+        except Exception as e:  # noqa: BLE001
+            log.error("could not open stream: %s", e)
+            self._stream = None
 
-    def stop(self) -> np.ndarray | None:
+    def close(self) -> None:
         if self._stream is None:
-            return None
+            return
         try:
             self._stream.stop()
             self._stream.close()
-        finally:
-            self._stream = None
+        except Exception as e:  # noqa: BLE001
+            log.warning("close failed: %s", e)
+        self._stream = None
+
+    def set_device(self, device: int | str | None) -> None:
+        """Switch input device — reopens the stream."""
+        if device == self.device:
+            return
+        self.device = device
+        self.close()
         with self._lock:
+            self._prebuffer.clear()
+            self._chunks = []
+            self._saving = False
+        self._open_stream()
+
+    # ----------------------------------------------------- callback path
+    def _callback(self, indata: np.ndarray, frames: int, time_info, status) -> None:
+        if status:
+            log.warning("xrun/status: %s", status)
+        chunk = indata.copy()
+        with self._lock:
+            self._prebuffer.append(chunk)
+            if self._saving:
+                self._chunks.append(chunk)
+                saving = True
+            else:
+                saving = False
+        # Only feed the visualizer while we're actually recording — keeps
+        # the popup quiet in idle state.
+        if saving and self.on_chunk is not None:
+            try:
+                self.on_chunk(chunk)
+            except Exception as e:  # noqa: BLE001
+                log.error("on_chunk raised: %s", e)
+
+    # -------------------------------------------------------- recording
+    def start(self) -> None:
+        """Begin saving captured audio. Pre-buffer is seeded into the recording."""
+        with self._lock:
+            self._chunks = list(self._prebuffer)  # seed with prior ~500 ms
+            self._saving = True
+
+    def stop(self) -> np.ndarray | None:
+        with self._lock:
+            if not self._saving:
+                return None
+            self._saving = False
             if not self._chunks:
                 return None
             audio = np.concatenate(self._chunks, axis=0).flatten().astype(np.float32)
@@ -65,4 +137,11 @@ class AudioRecorder:
         return audio
 
     def is_recording(self) -> bool:
-        return self._stream is not None
+        return self._saving
+
+    def snapshot(self) -> np.ndarray | None:
+        """Copy of the audio captured so far without stopping. For streaming."""
+        with self._lock:
+            if not self._chunks:
+                return None
+            return np.concatenate(self._chunks, axis=0).flatten().astype(np.float32)
