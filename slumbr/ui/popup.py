@@ -61,8 +61,13 @@ _POPUP_H_EXPANDED = 92
 # strips down to just the audio visualizer — no status dot, no elapsed label,
 # no partial-transcript panel. Smaller window, no expansion when partials
 # arrive. For users who find the live word preview distracting.
-_POPUP_W_COMPACT = 140
-_POPUP_H_COMPACT = 26
+#
+# Sizing: the visualizer's natural minimum is 89×24 (14 bars × 3 px + 13 gaps
+# × 3 px + 8 px padding, fixed 24 px high). 110×30 frames it cleanly — bars
+# get ~6 px breathing room each side and the full 24 px of height after
+# layout margins (3 px top/bottom × 2).
+_POPUP_W_COMPACT = 110
+_POPUP_H_COMPACT = 30
 # Trim long partials from the head so the most recent words are always
 # visible — chars not words because the partial can include long unbroken
 # strings (URLs, etc).
