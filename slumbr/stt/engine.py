@@ -6,11 +6,13 @@ import time
 import numpy as np
 from faster_whisper import WhisperModel
 
+# Re-export TranscriptionError from the protocol module so legacy
+# imports of `slumbr.stt.engine.TranscriptionError` keep working.
+# The actual definition moved so the worker can use it without
+# pulling faster_whisper into the import graph.
+from .protocol import TranscriptionError  # noqa: F401
+
 log = logging.getLogger(__name__)
-
-
-class TranscriptionError(RuntimeError):
-    pass
 
 
 class WhisperEngine:

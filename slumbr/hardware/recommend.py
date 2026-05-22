@@ -1,14 +1,18 @@
 """Pure function: ``HardwareProfile`` → ``(primary, runner_up)`` BackendConfigs.
 
-Implements the decision matrix locked in the rearch plan:
-- NVIDIA → faster-whisper / CUDA, model size scaled to VRAM.
-- AMD Radeon RX → DirectML (Phase 2 backend; Phase 1 falls back to Moonshine
-  so AMD users aren't blocked on Phase 2 landing).
-- Intel Arc + iGPU → whisper.cpp SYCL (Phase 2; Phase 1 fallback to Moonshine).
-- CPU-only → Moonshine Small.
+Phase-2 decision matrix:
+- NVIDIA discrete         → faster-whisper / CUDA, model size scaled to VRAM.
+- AMD Radeon RX discrete  → DirectML + Whisper ONNX (DX12, vendor-neutral).
+- Intel Arc discrete      → DirectML (SYCL deferred to Phase 2C — needs
+                            a custom whisper.cpp DLL we don't ship yet).
+- Intel iGPU              → DirectML when usable; falls back to Moonshine
+                            CPU on weak iGPUs where DML is slower than CPU.
+- CPU-only                → Moonshine Small (~150–300 ms — snappier than
+                            whisper.cpp on CPU, and reuses the model that
+                            already powers the popup partials).
 
-No side effects, no I/O, no logging beyond DEBUG. The wizard calls this and
-shows the result to the user with a "Show alternatives" expander.
+No side effects, no I/O, no logging beyond DEBUG. The wizard calls this
+and shows the result to the user with a "Show alternatives" expander.
 """
 
 from __future__ import annotations
@@ -17,15 +21,6 @@ from dataclasses import dataclass
 
 from ..config import BackendConfig
 from .probe import GpuInfo, GpuVendor, HardwareProfile
-
-# Phase-1 backends ship in the base wheel. Phase-2 backends (directml,
-# whispercpp_*) need their wheels installed by the wizard before use.
-# In Phase 1 we transparently substitute the Moonshine CPU path for
-# AMD/Intel/CPU users — they get a working dictation experience while
-# the GPU backends are still being built — and the wizard records the
-# original GPU recommendation in ``cfg.extra['preferred']`` so we can
-# upgrade them automatically when Phase 2 lands.
-PHASE_1_BACKENDS = {"cuda_ct2", "moonshine"}
 
 
 @dataclass
@@ -37,11 +32,12 @@ class Recommendation:
     reason: str = ""  # one-line human description, shown under the card
 
 
-def recommend(profile: HardwareProfile, *, phase1_only: bool = True) -> Recommendation:
+def recommend(profile: HardwareProfile, *, phase1_only: bool = False) -> Recommendation:
     """Pick a backend for this machine.
 
-    ``phase1_only=True`` substitutes Moonshine for any Phase-2 backend.
-    Flip to False once AMD + Intel ship in Phase 2.
+    ``phase1_only=True`` (legacy, kept for tests + smoke runs) forces
+    AMD / Intel GPU paths to fall back to Moonshine on CPU. Phase 2
+    flips the default to False — DirectML is live.
     """
     gpu = profile.best_gpu
 
@@ -69,7 +65,7 @@ def recommend(profile: HardwareProfile, *, phase1_only: bool = True) -> Recommen
             name="directml",
             model=_whisper_model_for_vram(gpu.vram_bytes),
             compute_type="int8",
-            extra={"reason": f"AMD {_short_name(gpu.name)}"},
+            extra={"detected_gpu": gpu.name, "detected_vram_gb": round(gpu.vram_gb, 2)},
         )
         primary = _moonshine_for(profile) if phase1_only else ideal
         runner_up = _moonshine_for(profile)
@@ -77,38 +73,38 @@ def recommend(profile: HardwareProfile, *, phase1_only: bool = True) -> Recommen
             primary=primary,
             runner_up=runner_up,
             reason=(
-                f"AMD {_short_name(gpu.name)} detected. "
-                + (
-                    "DirectML backend ships in Phase 2 — running Moonshine on "
-                    "CPU for now (~150-300 ms latency). "
-                    "Your GPU will be used automatically once Phase 2 lands."
-                    if phase1_only
-                    else "Whisper via ONNX DirectML on your Radeon."
-                )
+                f"AMD {_short_name(gpu.name)} detected — Whisper {ideal.model} via "
+                "ONNX Runtime DirectML on your Radeon. "
+                "Pick CPU/Moonshine in alternatives for battery life."
+                if not phase1_only
+                else f"AMD {_short_name(gpu.name)} detected. Running Moonshine on CPU."
             ),
         )
 
     if gpu.vendor == GpuVendor.INTEL:
+        # Intel discrete (Arc) AND iGPU both route through DirectML in
+        # Phase 2. SYCL is the long-term Intel path but ships in Phase 2C
+        # (needs a custom whisper.cpp DLL we don't bundle yet).
+        # For very weak iGPUs (Intel UHD), DirectML's overhead can beat
+        # the iGPU's tiny throughput — we still recommend it because the
+        # Engine tab's runner-up lets the user opt down to Moonshine CPU.
         ideal = BackendConfig(
-            name="whispercpp_sycl",
-            model="small.en-q5_k_m",
-            threads=4,
-            extra={"reason": f"Intel {_short_name(gpu.name)}"},
+            name="directml",
+            model=_intel_model_for(gpu),
+            compute_type="int8",
+            extra={"detected_gpu": gpu.name, "detected_vram_gb": round(gpu.vram_gb, 2)},
         )
         primary = _moonshine_for(profile) if phase1_only else ideal
         runner_up = _moonshine_for(profile)
+        kind = "Arc" if gpu.is_discrete else "Xe / UHD iGPU"
         return Recommendation(
             primary=primary,
             runner_up=runner_up,
             reason=(
-                f"Intel {_short_name(gpu.name)} detected. "
-                + (
-                    "SYCL backend ships in Phase 2 — running Moonshine on "
-                    "CPU for now (~150-300 ms latency). "
-                    "Your GPU will be used automatically once Phase 2 lands."
-                    if phase1_only
-                    else "Whisper.cpp via Intel SYCL on your GPU."
-                )
+                f"Intel {kind} ({_short_name(gpu.name)}) detected — Whisper "
+                f"{ideal.model} via ONNX Runtime DirectML."
+                if not phase1_only
+                else f"Intel {_short_name(gpu.name)} detected. Running Moonshine on CPU."
             ),
         )
 
@@ -149,6 +145,16 @@ def _ct2_compute_type_for_vram(vram_bytes: int) -> str:
     if gb >= 7.5:
         return "int8_float16"
     return "int8"
+
+
+def _intel_model_for(gpu: GpuInfo) -> str:
+    """Intel discrete (Arc) gets the full small/medium tier; iGPUs are
+    pinned to small to keep latency under ~1 s even on UHD/Xe shared
+    memory. Users with beefier Arc cards can bump in Settings.
+    """
+    if gpu.is_discrete and gpu.vram_gb >= 6:
+        return "medium"
+    return "small"
 
 
 def _whisper_for_nvidia(gpu: GpuInfo) -> BackendConfig:

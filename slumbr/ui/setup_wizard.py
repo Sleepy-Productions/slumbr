@@ -29,12 +29,14 @@ from PySide6.QtWidgets import (
     QDialog,
     QHBoxLayout,
     QLabel,
+    QPlainTextEdit,
     QPushButton,
     QStackedWidget,
     QVBoxLayout,
     QWidget,
 )
 
+from ..bootstrap.install import InstallResult, InstallWorker
 from ..config import BackendConfig, SlumbrConfig
 from ..hardware.probe import HardwareProfile, probe
 from ..hardware.recommend import Recommendation, recommend
@@ -176,16 +178,25 @@ class SetupWizard(QDialog):
         outer.addWidget(self._stack, stretch=1)
 
         # Build screens up-front so signal wiring is straightforward.
+        # Screen indices: 0=Welcome  1=Probing  2=Recommend  3=Install  4=Done
+        # Install auto-skips to Done if the chosen backend's wheels are
+        # already present in the venv (e.g. when install.ps1 -Backend was used).
         self._welcome = self._build_welcome()
         self._probing = self._build_probing()
         self._recommend = self._build_recommend()
+        self._install = self._build_install()
         self._done = self._build_done()
-        for w in (self._welcome, self._probing, self._recommend, self._done):
+        for w in (self._welcome, self._probing, self._recommend, self._install, self._done):
             self._stack.addWidget(w)
 
         # State that the probe + recommend screens populate.
         self._profile: HardwareProfile | None = None
         self._recommendation: Recommendation | None = None
+
+        # Install lifecycle handles (filled in when install runs).
+        self._install_thread: QThread | None = None
+        self._install_worker: InstallWorker | None = None
+        self._install_succeeded = False
 
         # Footer with Back / Next
         footer = QHBoxLayout()
@@ -320,6 +331,38 @@ class SetupWizard(QDialog):
         layout.addStretch(1)
         return w
 
+    def _build_install(self) -> QWidget:
+        w = QWidget()
+        layout = QVBoxLayout(w)
+        layout.setContentsMargins(0, 8, 0, 0)
+        layout.setSpacing(14)
+
+        self._install_title = QLabel("Installing backend…")
+        tf = QFont()
+        tf.setPointSize(22)
+        tf.setBold(True)
+        self._install_title.setFont(tf)
+        layout.addWidget(self._install_title)
+
+        self._install_subtitle = QLabel(
+            "Slumbr is fetching the wheels for the backend you picked. "
+            "First time can take 1–3 minutes depending on your connection."
+        )
+        self._install_subtitle.setWordWrap(True)
+        self._install_subtitle.setStyleSheet(f"color: {TEXT_SECONDARY};")
+        layout.addWidget(self._install_subtitle)
+
+        self._install_log = QPlainTextEdit()
+        self._install_log.setReadOnly(True)
+        self._install_log.setFont(_mono_font())
+        self._install_log.setStyleSheet(
+            f"QPlainTextEdit {{ background: {BG_PANEL}; border: 1px solid {BORDER}; "
+            f"border-radius: 12px; padding: 10px; color: {TEXT_PRIMARY}; }}"
+        )
+        layout.addWidget(self._install_log, stretch=1)
+
+        return w
+
     def _build_done(self) -> QWidget:
         w = QWidget()
         layout = QVBoxLayout(w)
@@ -357,11 +400,14 @@ class SetupWizard(QDialog):
             self._stack.setCurrentIndex(1)
             self._update_footer_for_index(1)
             self._start_probe()
-        elif idx == 2:  # recommend -> done
-            self._commit_recommendation()
-            self._stack.setCurrentIndex(3)
-            self._update_footer_for_index(3)
-        elif idx == 3:  # done -> close + signal app to continue
+        elif idx == 2:  # recommend -> install (or skip-to-done)
+            self._advance_from_recommend()
+        elif idx == 3:  # install screen — Next acts as Cancel-or-Skip
+            # Only enabled in two states:
+            #   - install in progress: button is Cancel (handled separately)
+            #   - install failed:      button is Back to Recommend
+            self._on_install_back()
+        elif idx == 4:  # done -> close + signal app to continue
             if self._on_finished is not None:
                 self._on_finished()
             self.accept()  # QDialog.exec() returns Accepted
@@ -373,18 +419,26 @@ class SetupWizard(QDialog):
             # Back to welcome — let the user re-probe if they want
             self._stack.setCurrentIndex(0)
             self._update_footer_for_index(0)
+        elif idx == 3:
+            # On the install screen, Back means "stop and pick something else"
+            self._on_install_back()
 
     def _update_footer_for_index(self, idx: int) -> None:
-        # Back is meaningful only on the recommendation screen.
-        self._back_btn.setVisible(idx == 2)
+        # Back is meaningful on Recommend and Install (failed/finished) screens.
+        self._back_btn.setVisible(idx in (2, 3))
         labels = {
             0: "Get started",
-            1: "",  # hidden during probe
+            1: "",      # hidden during probe
             2: "Continue",
-            3: "Finish",
+            3: "Cancel install",   # becomes "Try another backend" on failure
+            4: "Finish",
         }
         self._next_btn.setText(labels.get(idx, "Next"))
         self._next_btn.setVisible(idx != 1)
+        # Disable Next on the install screen until pip is done — pressing
+        # it during a running install routes to cancel, not skip.
+        if idx == 3:
+            self._next_btn.setEnabled(True)
 
     # ----------------------------------------------------- probe lifecycle
 
@@ -410,7 +464,9 @@ class SetupWizard(QDialog):
     def _on_probe_finished(self, profile: HardwareProfile) -> None:
         self._dot_timer.stop()
         self._profile = profile
-        self._recommendation = recommend(profile, phase1_only=True)
+        # Phase 2: DirectML for AMD/Intel is live, so use the real
+        # recommendation (no `phase1_only` fallback to Moonshine).
+        self._recommendation = recommend(profile)
         self._populate_recommendation_screen()
         self._stack.setCurrentIndex(2)
         self._update_footer_for_index(2)
@@ -475,6 +531,96 @@ class SetupWizard(QDialog):
             "You can change this any time from Settings → Engine."
         )
 
+    # ----------------------------------------------------- install lifecycle
+
+    def _advance_from_recommend(self) -> None:
+        """Recommend → Install (or skip straight to Done if no install needed)."""
+        if self._recommendation is None:
+            return
+        backend_name = self._recommendation.primary.name
+        extras = _extras_for_backend(backend_name)
+        if not extras or _is_backend_installed(backend_name):
+            log.info(
+                "wizard: backend %s needs no install (extras=%r, installed=%s) — skipping to Done",
+                backend_name, extras, _is_backend_installed(backend_name),
+            )
+            self._commit_recommendation()
+            self._stack.setCurrentIndex(4)
+            self._update_footer_for_index(4)
+            return
+        # Need to install — show the Install screen and kick off pip.
+        self._stack.setCurrentIndex(3)
+        self._update_footer_for_index(3)
+        self._start_install(extras, backend_name)
+
+    def _start_install(self, extras: list[str], backend_name: str) -> None:
+        self._install_log.clear()
+        self._install_title.setText(f"Installing {_BACKEND_LABELS.get(backend_name, backend_name)}…")
+        self._install_subtitle.setText(
+            f"Running `pip install slumbr[{','.join(extras)}]` in your venv. "
+            "First time can take 1–3 minutes."
+        )
+        self._install_succeeded = False
+        self._next_btn.setText("Cancel install")
+
+        self._install_thread = QThread(self)
+        self._install_worker = InstallWorker(extras)
+        self._install_worker.moveToThread(self._install_thread)
+        self._install_thread.started.connect(self._install_worker.run)
+        self._install_worker.line.connect(self._on_install_line)
+        self._install_worker.finished.connect(self._on_install_finished)
+        self._install_worker.finished.connect(self._install_thread.quit)
+        self._install_worker.finished.connect(self._install_worker.deleteLater)
+        self._install_thread.finished.connect(self._install_thread.deleteLater)
+        self._install_thread.start()
+
+    def _on_install_line(self, line: str) -> None:
+        self._install_log.appendPlainText(line)
+        # Keep the cursor at the bottom so the user sees progress.
+        bar = self._install_log.verticalScrollBar()
+        bar.setValue(bar.maximum())
+
+    def _on_install_finished(self, result: InstallResult) -> None:
+        if result.success:
+            log.info("install succeeded: %s", result.summary)
+            self._install_succeeded = True
+            self._install_title.setText("Backend installed")
+            self._install_subtitle.setText(
+                "Slumbr will relaunch to pick up the new wheels. "
+                "Click Finish to continue."
+            )
+            # Commit the recommendation now that the wheels exist.
+            self._commit_recommendation()
+            # Auto-advance after a short pause so the user sees the success
+            # message before Done lands.
+            QTimer.singleShot(800, self._jump_to_done)
+        else:
+            log.warning("install failed: %s", result.summary)
+            self._install_title.setText("Install failed")
+            self._install_subtitle.setText(
+                f"{result.summary}\n\nClick Back to pick a different backend, "
+                "or fix the problem and re-run Slumbr."
+            )
+            self._next_btn.setText("Try another backend")
+
+    def _jump_to_done(self) -> None:
+        self._stack.setCurrentIndex(4)
+        self._update_footer_for_index(4)
+        # If install succeeded and the wheels include in-use DLLs, the
+        # safe thing is to relaunch slumbr — done_summary already calls
+        # this out. We don't auto-relaunch here because the user might
+        # have unsaved work in the wizard surface.
+
+    def _on_install_back(self) -> None:
+        """Cancel a running install (or just go back if it already finished)."""
+        if self._install_worker is not None and not self._install_succeeded:
+            try:
+                self._install_worker.cancel()
+            except Exception as e:  # noqa: BLE001
+                log.warning("install cancel raised: %s", e)
+        self._stack.setCurrentIndex(2)
+        self._update_footer_for_index(2)
+
 
 def _default_model_for(backend_name: str) -> str:
     return {
@@ -484,3 +630,58 @@ def _default_model_for(backend_name: str) -> str:
         "whispercpp_sycl": "small.en-q5_k_m",
         "whispercpp_cpu": "small.en-q5_k_m",
     }.get(backend_name, "small")
+
+
+# Map each backend to the pyproject extras the wizard pip-installs.
+# Moonshine is intentionally empty: sherpa-onnx is in base deps and is
+# the only thing Moonshine needs, so no install step fires.
+_BACKEND_EXTRAS: dict[str, list[str]] = {
+    "cuda_ct2": ["nvidia"],
+    "moonshine": [],
+    "directml": ["amd"],
+    "whispercpp_sycl": ["intel"],
+    "whispercpp_cpu": ["cpu"],
+}
+
+
+def _extras_for_backend(backend_name: str) -> list[str]:
+    return list(_BACKEND_EXTRAS.get(backend_name, []))
+
+
+def _is_backend_installed(backend_name: str) -> bool:
+    """Check whether the backend's primary import is satisfiable.
+
+    Probes by ``importlib.util.find_spec`` (no module is actually
+    imported here) so we don't pay startup cost for backends we're
+    not going to use.
+    """
+    import importlib.util  # noqa: PLC0415
+
+    probes: dict[str, list[str]] = {
+        # cuda_ct2 needs faster-whisper + ctranslate2 + the NVIDIA CUDA wheels.
+        # We only check faster_whisper since it transitively pulls ctranslate2,
+        # and the nvidia.* DLL search-path bootstrap in slumbr/__init__.py
+        # makes the wheels effectively optional at import time (only failing
+        # at first transcribe).
+        "cuda_ct2": ["faster_whisper"],
+        # moonshine uses sherpa-onnx which is always in base deps.
+        "moonshine": ["sherpa_onnx"],
+        # directml needs onnxruntime-directml + optimum.
+        "directml": ["onnxruntime", "optimum"],
+        "whispercpp_sycl": ["pywhispercpp"],
+        "whispercpp_cpu": ["pywhispercpp"],
+    }
+    for mod in probes.get(backend_name, []):
+        if importlib.util.find_spec(mod) is None:
+            return False
+    return True
+
+
+def _mono_font() -> QFont:
+    """Monospace font for the pip output log. Consolas is the
+    Windows-default and looks right inside Slumbr's violet/dark theme.
+    """
+    f = QFont("Consolas")
+    f.setStyleHint(QFont.Monospace)
+    f.setPointSize(9)
+    return f

@@ -41,13 +41,12 @@ def build_transcriber(
         from .backends.moonshine import MoonshineTranscriber  # noqa: PLC0415
         return MoonshineTranscriber(cfg, language=language, initial_prompt=initial_prompt)
 
-    # Phase 2 backends — placeholders so the dispatch surface is
-    # visible. Each raises a clear error if the user somehow lands
-    # here in Phase 1 (e.g. by hand-editing config.json).
-    if name in ("directml", "whispercpp_sycl", "whispercpp_cpu"):
-        raise NotImplementedError(
-            f"Backend {name!r} ships in Slumbr Phase 2. "
-            "For now pick 'cuda_ct2' (NVIDIA) or 'moonshine' (CPU)."
-        )
+    if name == "directml":
+        from .backends.directml import DirectMLTranscriber  # noqa: PLC0415
+        return DirectMLTranscriber(cfg, language=language, initial_prompt=initial_prompt)
+
+    if name in ("whispercpp_sycl", "whispercpp_cpu"):
+        from .backends.whispercpp import WhisperCppTranscriber  # noqa: PLC0415
+        return WhisperCppTranscriber(cfg, language=language, initial_prompt=initial_prompt)
 
     raise ValueError(f"unknown backend name: {name!r}")
