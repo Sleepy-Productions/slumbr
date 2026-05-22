@@ -26,23 +26,75 @@ __version__ = "0.1.0"
 
 
 def _configure_logging() -> None:
-    """One-time root-logger setup. `--debug` flips Slumbr loggers to DEBUG
-    in `__main__`; chatty third-party libs are pinned to WARNING below so
-    debug mode stays readable instead of being drowned in httpcore / PIL
-    plugin-import / urllib3 noise.
+    """One-time root-logger setup.
+
+    Two sinks:
+      - Console (stdout): INFO+; what you see when you run `python -m slumbr`
+        from a terminal. ``--debug`` in ``__main__`` flips Slumbr loggers to
+        DEBUG for the console sink only.
+      - Rotating file at ``%APPDATA%\\Slumbr\\logs\\slumbr.log``: DEBUG+, captures
+        everything regardless of console verbosity. Survives across runs and
+        across crashes. ~5 MB per file × 5 backups (25 MB cap) so it can't grow
+        unbounded. This is the load-bearing sink when Slumbr launches via the
+        desktop shortcut through ``pythonw.exe``, because pythonw discards stdout.
+
+    Chatty third-party libs are pinned to WARNING so the log stream stays
+    readable instead of being drowned in httpcore / PIL plugin-import / urllib3.
+
+    Note: the file log captures every transcript verbatim. Fine on a personal
+    machine; worth knowing if a copy of the log file ever needs to leave it.
     """
     root = logging.getLogger()
     if root.handlers:
         return
-    handler = logging.StreamHandler()
-    handler.setFormatter(
-        logging.Formatter(
-            fmt="%(asctime)s %(levelname)-7s %(name)s: %(message)s",
-            datefmt="%H:%M:%S",
-        )
+
+    formatter = logging.Formatter(
+        fmt="%(asctime)s %(levelname)-7s %(name)s: %(message)s",
+        datefmt="%H:%M:%S",
     )
-    root.addHandler(handler)
-    root.setLevel(logging.INFO)
+
+    # ----- console
+    console = logging.StreamHandler()
+    console.setFormatter(formatter)
+    console.setLevel(logging.INFO)
+    root.addHandler(console)
+
+    # ----- rotating file
+    try:
+        from logging.handlers import RotatingFileHandler  # noqa: PLC0415
+
+        appdata = os.environ.get("APPDATA")
+        log_dir = (
+            (Path(appdata) / "Slumbr" / "logs")
+            if appdata
+            else (Path.home() / ".slumbr" / "logs")
+        )
+        log_dir.mkdir(parents=True, exist_ok=True)
+        log_path = log_dir / "slumbr.log"
+        # Use the same timestamp format as the console but with a date so a
+        # multi-day log is navigable.
+        file_formatter = logging.Formatter(
+            fmt="%(asctime)s %(levelname)-7s %(name)s: %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+        )
+        file_handler = RotatingFileHandler(
+            log_path,
+            maxBytes=5 * 1024 * 1024,
+            backupCount=5,
+            encoding="utf-8",
+        )
+        file_handler.setFormatter(file_formatter)
+        file_handler.setLevel(logging.DEBUG)
+        root.addHandler(file_handler)
+        # Root must be at DEBUG for the file sink to receive DEBUG records,
+        # but per-logger levels still gate what gets through — third-party
+        # noise levels below filter it out for both sinks.
+        root.setLevel(logging.DEBUG)
+    except Exception:  # noqa: BLE001
+        # File sink is best-effort. If %APPDATA% is denied or the disk is
+        # full, console-only is still better than crashing on startup.
+        root.setLevel(logging.INFO)
+
     for noisy in (
         "httpcore",
         "httpx",
