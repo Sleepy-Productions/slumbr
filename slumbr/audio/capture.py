@@ -42,12 +42,24 @@ class AudioRecorder:
         channels: int = CHANNELS,
         device: int | str | None = None,
         on_chunk: Callable[[np.ndarray], None] | None = None,
+        on_chunk_continuous: Callable[[np.ndarray], None] | None = None,
         prebuffer_seconds: float = PREBUFFER_SECONDS,
     ) -> None:
         self.samplerate = samplerate
         self.channels = channels
         self.device = device
+        # Two callback variants:
+        #   ``on_chunk``           — fires only while we're saving a
+        #                            dictation; feeds the popup + streaming
+        #                            engine which only matter during
+        #                            recording.
+        #   ``on_chunk_continuous`` — fires on every PortAudio callback,
+        #                            regardless of saving state. The virtual
+        #                            mic mirror lives here because call apps
+        #                            need a continuous audio feed even when
+        #                            the user isn't dictating.
         self.on_chunk = on_chunk
+        self.on_chunk_continuous = on_chunk_continuous
         # +1 because a partially-filled block counts.
         prebuffer_blocks = int(prebuffer_seconds * samplerate / BLOCKSIZE) + 1
         self._prebuffer: deque[np.ndarray] = deque(maxlen=prebuffer_blocks)
@@ -129,8 +141,18 @@ class AudioRecorder:
                 saving = True
             else:
                 saving = False
-        # Only feed the visualizer while we're actually recording — keeps
-        # the popup quiet in idle state.
+        # Continuous callback fires on every chunk regardless of state.
+        # This is where MicMirror lives — call apps need a continuous
+        # feed of the user's mic, not just chunks during dictation.
+        # Has to come first so a slow visualizer never delays the cable
+        # feed by a frame.
+        if self.on_chunk_continuous is not None:
+            try:
+                self.on_chunk_continuous(chunk)
+            except Exception as e:  # noqa: BLE001
+                log.error("on_chunk_continuous raised: %s", e)
+        # Recording-gated callback. Keeps the popup quiet in idle state
+        # and avoids re-emitting Qt signals when no one's listening.
         if saving and self.on_chunk is not None:
             try:
                 self.on_chunk(chunk)
