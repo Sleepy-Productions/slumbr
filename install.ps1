@@ -1,16 +1,28 @@
 # install.ps1 — one-shot dev install for Slumbr on Windows.
 #
 # Usage:
-#   .\install.ps1               # default: create .venv, install runtime + dev extras, build icon, create desktop shortcut
-#   .\install.ps1 -Rebuild      # wipe an existing .venv and start fresh
-#   .\install.ps1 -NoShortcut   # skip the desktop shortcut
-#   .\install.ps1 -NoDevExtras  # skip pytest + ruff (smaller install)
+#   .\install.ps1                  # base install only — Slumbr's first-launch wizard
+#                                  # detects your hardware and pip-installs the right backend
+#                                  # (NVIDIA / AMD / Intel / CPU) for you.
+#   .\install.ps1 -Backend nvidia  # pre-install a specific backend's extras up-front
+#                                  # (skips the wizard's install step).
+#                                  # Valid: nvidia | amd | intel | cpu
+#   .\install.ps1 -Rebuild         # wipe an existing .venv and start fresh
+#   .\install.ps1 -NoShortcut      # skip the desktop shortcut
+#   .\install.ps1 -NoDevExtras     # skip pytest + ruff (smaller install)
 #
 # Requires Python 3.10–3.12 reachable via `py` (Windows launcher) or `python`.
 # Designed to be idempotent — re-running upgrades pip + dep set without rebuilding the world.
+#
+# Phase 2 change: NVIDIA / AMD / Intel / CPU backend wheels moved into
+# `[project.optional-dependencies]` extras. A bare `install.ps1` no longer
+# downloads 1.9 GB of CUDA wheels onto AMD machines — the wizard makes
+# that choice at first launch based on actual hardware.
 
 [CmdletBinding()]
 param(
+    [ValidateSet('nvidia', 'amd', 'intel', 'cpu', '')]
+    [string]$Backend = '',
     [switch]$Rebuild,
     [switch]$NoShortcut,
     [switch]$NoDevExtras
@@ -85,8 +97,19 @@ Write-Step "Upgrading pip"
 & $VENV_PY -m pip install --upgrade pip --disable-pip-version-check | Out-Host
 if ($LASTEXITCODE -ne 0) { Fail "pip upgrade failed" }
 
-$extras = if ($NoDevExtras) { '' } else { '[dev]' }
-Write-Step "Installing Slumbr$extras (this pulls ~2.8 GB on a cold cache — CUDA + PySide6 + faster-whisper)"
+# Build the extras token. We always want `dev` unless -NoDevExtras; we add
+# the chosen backend if -Backend was given. Anything not in the extras list
+# is deferred to the wizard's Install screen at first launch.
+$extrasList = @()
+if (-not $NoDevExtras) { $extrasList += 'dev' }
+if ($Backend) { $extrasList += $Backend }
+$extras = if ($extrasList.Count -gt 0) { "[" + ($extrasList -join ',') + "]" } else { '' }
+
+if ($Backend) {
+    Write-Step "Installing Slumbr$extras (pre-baking the $Backend backend's wheels)"
+} else {
+    Write-Step "Installing Slumbr$extras (base only — Slumbr's wizard installs the right backend on first launch)"
+}
 & $VENV_PY -m pip install -e ".$extras" | Out-Host
 if ($LASTEXITCODE -ne 0) { Fail "pip install -e .$extras failed" }
 Write-Ok "deps installed"
@@ -102,9 +125,6 @@ if ($NoShortcut) {
     Write-Warn2 "Skipping desktop shortcut (you passed -NoShortcut)"
 } else {
     Write-Step "Creating desktop shortcut (Slumbr.lnk)"
-    # pywin32 is optional — install_shortcut.py falls back to a VBScript writer
-    # if it's missing, but installing it once means the .lnk is created in-line
-    # rather than asking the user to double-click a .vbs file.
     & $VENV_PY -m pip install --quiet pywin32 | Out-Host
     & $VENV_PY (Join-Path $ROOT 'scripts\install_shortcut.py') | Out-Host
     if ($LASTEXITCODE -ne 0) { Write-Warn2 "shortcut creation hit an error — re-run scripts\install_shortcut.py manually" }
@@ -119,5 +139,15 @@ Write-Host "  - Double-click the 'Slumbr' shortcut on your desktop (no console w
 Write-Host "  - From this folder:  .\.venv\Scripts\pythonw.exe -m slumbr"
 Write-Host "  - With logs:         .\.venv\Scripts\python.exe -m slumbr --debug"
 Write-Host ""
-Write-Host "First launch will download ~1.5 GB of Whisper weights from Hugging Face."
-Write-Host "After that, Slumbr is fully offline. Tap Caps Lock to dictate."
+if ($Backend) {
+    Write-Host "Backend pre-baked: $Backend"
+    Write-Host "  Slumbr will skip the install step of the first-launch wizard."
+} else {
+    Write-Host "First launch:"
+    Write-Host "  Slumbr's wizard will detect your hardware and pip-install the right backend"
+    Write-Host "  (NVIDIA: ~1.9 GB; AMD/Intel: ~600 MB; CPU: ~50 MB). Have an internet"
+    Write-Host "  connection ready for the first run."
+}
+Write-Host ""
+Write-Host "After install, the first transcribe downloads ~1.5 GB of Whisper weights from"
+Write-Host "Hugging Face. After that, Slumbr is fully offline. Tap Caps Lock to dictate."

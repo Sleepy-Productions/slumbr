@@ -11,8 +11,7 @@ from __future__ import annotations
 import numpy as np
 from PySide6.QtCore import QThread, Signal
 
-from .engine import TranscriptionError
-from .protocol import Transcriber
+from .protocol import Transcriber, TranscriptionError
 
 
 class TranscribeWorker(QThread):

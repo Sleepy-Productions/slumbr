@@ -7,6 +7,11 @@ typed `BackendConfig` slice via the factory, not through this Protocol —
 that's why `__init__` is deliberately absent.
 
 If you add a method here, every backend has to grow it. Resist.
+
+``TranscriptionError`` also lives here (rather than in ``engine.py``)
+so the worker module can import it without dragging in faster_whisper
++ ctranslate2. AMD / Intel / CPU users don't have those wheels and
+shouldn't need them to import slumbr.stt.worker.
 """
 
 from __future__ import annotations
@@ -14,6 +19,14 @@ from __future__ import annotations
 from typing import Protocol, runtime_checkable
 
 import numpy as np
+
+
+class TranscriptionError(RuntimeError):
+    """Raised by any backend's ``transcribe()`` when decoding fails.
+
+    Backends should wrap their native exceptions in this so the
+    worker's ``failed`` signal can show a unified error to the user.
+    """
 
 
 @runtime_checkable

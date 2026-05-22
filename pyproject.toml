@@ -25,25 +25,69 @@ classifiers = [
 ]
 
 dependencies = [
-    "faster-whisper==1.2.1",
+    # ----- Always-installed core -----
+    # sherpa-onnx is non-negotiable: Slumbr's streaming popup partials
+    # always run Moonshine + Silero VAD + online-punct on CPU regardless
+    # of which primary backend the user picks. ~80 MB.
     "sherpa-onnx>=1.13",
+    # Audio capture + hotkey + paste — every backend needs them.
     "sounddevice==0.3.12",
     "numpy",
     "pynput==1.7.6",
     "pyperclip",
+    # UI stack.
     "PySide6==6.7.0",
     "pyqtgraph",
     "pystray",
     "Pillow",
-    # CUDA runtime for ctranslate2 (faster-whisper backend). ctranslate2 4.x
-    # dropped these as transitive deps — they must be pinned here or every
-    # fresh install hits "cublas64_12.dll not found" on first transcribe.
+]
+
+[project.optional-dependencies]
+# ----- Per-vendor backends, picked by the first-launch wizard.
+# The wizard runs `pip install slumbr[<vendor>]` once the user has
+# accepted a recommendation; base install (no extras) stays lean
+# so AMD users don't drag in 1.9 GB of NVIDIA CUDA wheels.
+
+nvidia = [
+    # faster-whisper / CTranslate2 CUDA path.
+    "faster-whisper==1.2.1",
+    # CUDA runtime DLLs — ctranslate2 4.x dropped these as transitive deps,
+    # so they must be pinned here or every fresh install hits
+    # "cublas64_12.dll not found" on first transcribe.
     "nvidia-cublas-cu12",
     "nvidia-cudnn-cu12",
     "nvidia-cuda-nvrtc-cu12",
 ]
 
-[project.optional-dependencies]
+amd = [
+    # ONNX Runtime DirectML — works on any DX12 GPU (AMD Radeon RX,
+    # Intel Arc, even older NVIDIA). `optimum` + `transformers` give us
+    # the maintained Whisper-to-ONNX runtime path on top of ORT.
+    "onnxruntime-directml>=1.18",
+    "optimum>=1.21",
+    "transformers>=4.40",
+]
+
+intel = [
+    # Phase 2 ships only the CPU build of pywhispercpp. Intel SYCL
+    # (whisper.cpp -DGGML_SYCL=ON) requires a custom build pipeline
+    # that's a separate distribution problem; intel users on Phase 2
+    # land on DirectML or CPU pywhispercpp instead.
+    "pywhispercpp>=1.4.1",
+    # DirectML is the snappier path for Intel Arc + Xe iGPUs; keep
+    # both wheels so the recommender can pick at runtime.
+    "onnxruntime-directml>=1.18",
+    "optimum>=1.21",
+    "transformers>=4.40",
+]
+
+cpu = [
+    # CPU users default to Moonshine (already in base via sherpa-onnx).
+    # pywhispercpp is offered for users who want Whisper-quality at
+    # the cost of latency (~4-10 s for a 5 s utterance).
+    "pywhispercpp>=1.4.1",
+]
+
 dev = [
     "pytest",
     "ruff",
