@@ -111,6 +111,17 @@ class SlumbrConfig:
     # ----- Streaming engine experiment toggle -----
     streaming_visual_leading_edge: bool = False
 
+    # ----- Reverse PTT (mute external apps while dictating) -----
+    # When enabled and ``reverse_ptt_vk`` is non-zero, Slumbr presses
+    # that VK key for the duration of every dictation session. The user
+    # configures the same keybind in their call app's "Push To Mute"
+    # (Discord) / equivalent. This is a workaround: Windows has no
+    # per-app mic mute API, so we lean on the other app's own mute
+    # keybind. A virtual-audio-routing variant (works in any app) is
+    # tracked as a Phase 3 backlog item.
+    reverse_ptt_enabled: bool = False
+    reverse_ptt_vk: int = 0
+
     # ----- Window close policy (vestigial — the hub window is gone in
     # the May 2026 rearch, but the field remains so older configs load
     # cleanly and downstream code can read it without KeyError).
