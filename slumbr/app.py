@@ -44,6 +44,7 @@ from PySide6.QtWidgets import QApplication, QDialog
 from . import history
 from .audio.capture import SAMPLE_RATE, AudioRecorder
 from .audio.mirror import MicMirror
+from .bootstrap.install import relaunch_slumbr
 from .config import SlumbrConfig
 from .input.foreground import ForegroundTracker
 from .input.hotkey import Hotkey
@@ -73,6 +74,7 @@ class _Bridge(QObject):
     toggle = Signal(str)            # source tag: "hotkey", "tray"
     open_settings = Signal()
     quit_requested = Signal()
+    restart_requested = Signal()
     audio_chunk = Signal(object)    # numpy ndarray payload
 
 
@@ -140,6 +142,7 @@ class SlumbrApp:
         self.bridge.toggle.connect(self._on_toggle, Qt.QueuedConnection)
         self.bridge.open_settings.connect(self._on_open_settings, Qt.QueuedConnection)
         self.bridge.quit_requested.connect(self._on_quit, Qt.QueuedConnection)
+        self.bridge.restart_requested.connect(self._on_restart, Qt.QueuedConnection)
         self.bridge.audio_chunk.connect(self._on_audio_chunk, Qt.QueuedConnection)
 
         # ----- Audio recorder.
@@ -153,6 +156,7 @@ class SlumbrApp:
             on_toggle=lambda: self.bridge.toggle.emit("tray"),
             on_settings=self.bridge.open_settings.emit,
             on_quit=self.bridge.quit_requested.emit,
+            on_restart=self.bridge.restart_requested.emit,
             hotkey_label=vk_label(self.config.hotkey_vk),
         )
         self.tray.start()
@@ -466,6 +470,26 @@ class SlumbrApp:
         log.info("hotkey rebound to %s (vk=%#x)", vk_label(vk), vk)
         self.hotkey.set_vk(vk)
         self.tray.set_hotkey_label(vk_label(vk))
+
+    # ------------------------------------------------------------- restart
+    def _on_restart(self) -> None:
+        """Spawn a fresh Slumbr in a detached process, then quit this one.
+
+        Spawn-first / quit-second so a stuck shutdown still gets the
+        replacement running. Brief overlap (~3–5 s while the new
+        instance loads the model) is acceptable — both share VRAM
+        cleanly and pynput's hook reshuffles when the old process
+        releases it.
+
+        Use case: post-install relaunch after Settings → Behavior →
+        Install VB-Cable (driver only appears in sounddevice's device
+        list after a process restart following the Windows reboot, but
+        a Slumbr-internal restart also picks up config-only changes
+        that aren't hot-applied — switching backend, etc.).
+        """
+        log.info("restart requested")
+        relaunch_slumbr()
+        self._on_quit()
 
     # ------------------------------------------------------------------ exit
     def _on_quit(self) -> None:
