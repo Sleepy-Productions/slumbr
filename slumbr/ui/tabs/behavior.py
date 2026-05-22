@@ -108,6 +108,20 @@ class BehaviorTab(QWidget):
         self._compact_popup_cb.toggled.connect(self._on_compact_popup_toggle)
         layout.addWidget(self._compact_popup_cb)
 
+        # Cursor-follow popup
+        self._follow_cursor_cb = QCheckBox(
+            "Popup follows the mouse cursor while recording"
+        )
+        self._follow_cursor_cb.setChecked(config.popup_follow_cursor)
+        self._follow_cursor_cb.toggled.connect(self._on_follow_cursor_toggle)
+        layout.addWidget(self._follow_cursor_cb)
+        layout.addWidget(
+            field_hint(
+                "Off by default — if you dictate into a terminal, mouse motion "
+                "events can leak as garbage text into your transcript."
+            )
+        )
+
         # ----- Reverse PTT
         layout.addSpacing(10)
         layout.addWidget(field_label("Reverse PTT (mute external apps while dictating)"))
@@ -252,6 +266,10 @@ class BehaviorTab(QWidget):
 
     def _on_compact_popup_toggle(self, checked: bool) -> None:
         self._config.compact_popup = checked
+        self.config_changed.emit()
+
+    def _on_follow_cursor_toggle(self, checked: bool) -> None:
+        self._config.popup_follow_cursor = checked
         self.config_changed.emit()
 
     def _on_install_vbcable(self) -> None:

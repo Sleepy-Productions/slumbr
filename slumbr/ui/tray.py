@@ -25,6 +25,7 @@ import pystray
 from PIL import Image, ImageDraw
 
 from .. import history
+from ..config import SlumbrConfig
 from ..state import State
 from ..theme import (
     COLOR_IDLE,
@@ -74,12 +75,22 @@ class SlumbrTray:
         on_settings: Callable[[], None],
         on_quit: Callable[[], None],
         on_restart: Callable[[], None],
+        config: SlumbrConfig,
+        on_quick_toggle: Callable[[str], None],
         hotkey_label: str = "Caps Lock",
     ) -> None:
         self._on_toggle = on_toggle
         self._on_settings = on_settings
         self._on_quit = on_quit
         self._on_restart = on_restart
+        # Quick-toggle support: tray menu shows a small set of checkbox
+        # items mirroring high-frequency settings (mic routing, reverse
+        # PTT, compact popup, follow cursor). Clicking one fires
+        # ``on_quick_toggle(field_name)`` which flips the bool on
+        # ``config`` and routes through the app's normal config-changed
+        # path (saves to disk + reconciles audio + refreshes tray).
+        self._config = config
+        self._on_quick_toggle = on_quick_toggle
         self._icon: pystray.Icon | None = None
         self._state = State.IDLE
         self._hotkey_label = hotkey_label
@@ -98,11 +109,36 @@ class SlumbrTray:
         # The 'Last: …' header is enabled=False so it renders greyed-out
         # and doesn't fire on click. pystray re-invokes the lambda each
         # time the menu opens, so the snippet stays fresh.
+        # Quick toggles below it expose the high-frequency settings —
+        # ``checked`` callable re-reads the bool each time the menu
+        # opens, so the check marks stay accurate even after a config
+        # change from elsewhere (Settings dialog, hot reload).
         return pystray.Menu(
             pystray.MenuItem(
                 lambda _item: _last_transcript_label(),
                 None,
                 enabled=False,
+            ),
+            pystray.Menu.SEPARATOR,
+            pystray.MenuItem(
+                "Virtual mic routing",
+                lambda _icon, _item: self._on_quick_toggle("mic_routing_enabled"),
+                checked=lambda _item: self._config.mic_routing_enabled,
+            ),
+            pystray.MenuItem(
+                "Reverse PTT (Discord)",
+                lambda _icon, _item: self._on_quick_toggle("reverse_ptt_enabled"),
+                checked=lambda _item: self._config.reverse_ptt_enabled,
+            ),
+            pystray.MenuItem(
+                "Compact popup",
+                lambda _icon, _item: self._on_quick_toggle("compact_popup"),
+                checked=lambda _item: self._config.compact_popup,
+            ),
+            pystray.MenuItem(
+                "Popup follows cursor",
+                lambda _icon, _item: self._on_quick_toggle("popup_follow_cursor"),
+                checked=lambda _item: self._config.popup_follow_cursor,
             ),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem(

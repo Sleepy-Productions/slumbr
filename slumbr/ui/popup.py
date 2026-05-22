@@ -512,6 +512,10 @@ class RecordingPopup(QWidget):
         # stays anchored above-right of wherever the cursor is now.
         # Paused during the resize animation so the bottom-anchor
         # math in ``_resize_tick`` doesn't fight the follow updates.
+        # Opt-in (default off) because moving the mouse over a
+        # terminal with xterm mouse-tracking enabled echoes motion
+        # codes into stdin, which corrupts pasted transcripts.
+        self._follow_enabled = False
         self._follow_timer = QTimer(self)
         self._follow_timer.setInterval(16)
         self._follow_timer.timeout.connect(self._follow_tick)
@@ -605,7 +609,8 @@ class RecordingPopup(QWidget):
         self._reposition()
         self.show()
         self.raise_()
-        self._follow_timer.start()
+        if self._follow_enabled:
+            self._follow_timer.start()
 
     def show_transcribing(self) -> None:
         self._dot.set_color(COLOR_TRANSCRIBING)
@@ -617,7 +622,8 @@ class RecordingPopup(QWidget):
         self.show()
         self.raise_()
         # Idempotent — keeps following through the brief transcribe phase.
-        self._follow_timer.start()
+        if self._follow_enabled:
+            self._follow_timer.start()
 
     def push_samples(self, samples: np.ndarray) -> None:
         self._visualizer.push_samples(samples)
@@ -668,6 +674,20 @@ class RecordingPopup(QWidget):
         if self._resize_timer.isActive():
             return
         self._reposition()
+
+    def set_follow_cursor(self, enabled: bool) -> None:
+        """Toggle whether the popup tracks the cursor while visible.
+
+        Off by default. Hot-applies — if the popup is currently visible
+        we start / stop the follow timer immediately.
+        """
+        if enabled == self._follow_enabled:
+            return
+        self._follow_enabled = enabled
+        if enabled and self.isVisible():
+            self._follow_timer.start()
+        elif not enabled:
+            self._follow_timer.stop()
 
     def set_compact(self, compact: bool) -> None:
         """Toggle the just-the-bars compact look.

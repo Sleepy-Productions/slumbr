@@ -75,6 +75,7 @@ class _Bridge(QObject):
     open_settings = Signal()
     quit_requested = Signal()
     restart_requested = Signal()
+    quick_toggle = Signal(str)      # SlumbrConfig field name (bool field)
     audio_chunk = Signal(object)    # numpy ndarray payload
 
 
@@ -126,6 +127,7 @@ class SlumbrApp:
         self.state = StateMachine()
         self.popup = RecordingPopup()
         self.popup.set_compact(self.config.compact_popup)
+        self.popup.set_follow_cursor(self.config.popup_follow_cursor)
         self.foreground = ForegroundTracker()
         self.foreground.start()
         self._paste_target_hwnd: int | None = None
@@ -144,6 +146,7 @@ class SlumbrApp:
         self.bridge.open_settings.connect(self._on_open_settings, Qt.QueuedConnection)
         self.bridge.quit_requested.connect(self._on_quit, Qt.QueuedConnection)
         self.bridge.restart_requested.connect(self._on_restart, Qt.QueuedConnection)
+        self.bridge.quick_toggle.connect(self._on_quick_toggle, Qt.QueuedConnection)
         self.bridge.audio_chunk.connect(self._on_audio_chunk, Qt.QueuedConnection)
 
         # ----- Audio recorder.
@@ -168,6 +171,8 @@ class SlumbrApp:
             on_settings=self.bridge.open_settings.emit,
             on_quit=self.bridge.quit_requested.emit,
             on_restart=self.bridge.restart_requested.emit,
+            config=self.config,
+            on_quick_toggle=self.bridge.quick_toggle.emit,
             hotkey_label=vk_label(self.config.hotkey_vk),
         )
         self.tray.start()
@@ -434,8 +439,11 @@ class SlumbrApp:
         # Reconcile the virtual-mic mirror with the current settings —
         # hot-start, hot-stop, or hot-swap-device without restart.
         self._reconcile_mic_mirror()
-        # Popup look (compact vs full).
+        # Popup look (compact vs full) + cursor-follow.
         self.popup.set_compact(self.config.compact_popup)
+        self.popup.set_follow_cursor(self.config.popup_follow_cursor)
+        # Refresh the tray menu so quick-toggle checkmarks reflect new state.
+        self.tray.refresh_menu()
 
     # ----------------------------------------------------- mic mirror
 
@@ -518,6 +526,26 @@ class SlumbrApp:
         log.info("hotkey rebound to %s (vk=%#x)", vk_label(vk), vk)
         self.hotkey.set_vk(vk)
         self.tray.set_hotkey_label(vk_label(vk))
+
+    # --------------------------------------------------------- quick toggles
+    def _on_quick_toggle(self, field_name: str) -> None:
+        """Tray menu quick-toggle for a bool field on SlumbrConfig.
+
+        Flips the named field + reuses ``_on_config_changed`` so the
+        normal save + reconciliation path fires (recorder device
+        re-pick, mic mirror open/close, mute key re-arm, popup look,
+        tray menu refresh).
+        """
+        if not hasattr(self.config, field_name):
+            log.warning("unknown quick-toggle field: %r", field_name)
+            return
+        current = getattr(self.config, field_name)
+        if not isinstance(current, bool):
+            log.warning("quick-toggle target %r is not a bool", field_name)
+            return
+        setattr(self.config, field_name, not current)
+        log.info("quick-toggle %s -> %s", field_name, not current)
+        self._on_config_changed()
 
     # ------------------------------------------------------------- restart
     def _on_restart(self) -> None:

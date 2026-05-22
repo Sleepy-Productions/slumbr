@@ -128,6 +128,13 @@ class SlumbrConfig:
     # preview distracting and just want a glanceable "yes mic is live"
     # indicator.
     compact_popup: bool = False
+    # ``popup_follow_cursor=True`` re-anchors the popup to the cursor
+    # at 60 Hz while visible. Default off because moving the mouse
+    # over a terminal with xterm mouse-tracking enabled (Windows
+    # Terminal, conhost, Claude Code) makes the terminal echo mouse-
+    # motion escape codes into stdin — which then appear as garbage
+    # text in any pasted transcript that lands there.
+    popup_follow_cursor: bool = False
 
     # ----- Virtual mic routing (universal reverse-PTT, Phase 3) -----
     # Slumbr passes the real-mic audio through a virtual cable device
