@@ -146,9 +146,19 @@ class SlumbrApp:
         self.bridge.audio_chunk.connect(self._on_audio_chunk, Qt.QueuedConnection)
 
         # ----- Audio recorder.
+        # Two callbacks:
+        #   on_chunk            : only fires during dictation, feeds the
+        #                         popup visualizer + streaming engine.
+        #                         (Goes through bridge → Qt main thread.)
+        #   on_chunk_continuous : fires on every chunk regardless of state,
+        #                         feeds the MicMirror so call apps reading
+        #                         the virtual cable always hear the user
+        #                         (except during dictation when MicMirror
+        #                         is internally muted).
         self.recorder = AudioRecorder(
             device=self.config.input_device_name,
             on_chunk=self._on_audio_thread_chunk,
+            on_chunk_continuous=self._on_audio_continuous,
         )
 
         # ----- Tray.
@@ -205,15 +215,21 @@ class SlumbrApp:
         )
 
     # ------------------------------------------------------- audio chunk hop
-    def _on_audio_thread_chunk(self, samples: np.ndarray) -> None:
-        # Called on PortAudio input thread.
-        # 1) Forward to the virtual-mic mirror synchronously — the
-        #    OutputStream write is brief and this path has to stay
-        #    low-latency so other call apps don't lag the user.
+    def _on_audio_continuous(self, samples: np.ndarray) -> None:
+        """Fires on every PortAudio callback regardless of recording
+        state. Sole responsibility: keep the MicMirror fed so call
+        apps reading the virtual cable always hear the user (except
+        during dictation when MicMirror itself goes silent). Runs on
+        the PortAudio input thread — must stay fast.
+        """
         if self.mic_mirror is not None:
             self.mic_mirror.push(samples)
-        # 2) Marshal a copy onto the Qt main thread for the popup
-        #    visualizer + streaming-engine partials.
+
+    def _on_audio_thread_chunk(self, samples: np.ndarray) -> None:
+        # Called on PortAudio input thread, only during dictation
+        # (gated by AudioRecorder's _saving flag). Marshals a copy
+        # onto the Qt main thread for the popup visualizer +
+        # streaming-engine partials.
         self.bridge.audio_chunk.emit(samples.copy())
 
     def _on_audio_chunk(self, samples) -> None:
