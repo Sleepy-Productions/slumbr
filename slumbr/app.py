@@ -125,6 +125,7 @@ class SlumbrApp:
         # ----- App state + popup + foreground tracker.
         self.state = StateMachine()
         self.popup = RecordingPopup()
+        self.popup.set_compact(self.config.compact_popup)
         self.foreground = ForegroundTracker()
         self.foreground.start()
         self._paste_target_hwnd: int | None = None
@@ -433,6 +434,8 @@ class SlumbrApp:
         # Reconcile the virtual-mic mirror with the current settings —
         # hot-start, hot-stop, or hot-swap-device without restart.
         self._reconcile_mic_mirror()
+        # Popup look (compact vs full).
+        self.popup.set_compact(self.config.compact_popup)
 
     # ----------------------------------------------------- mic mirror
 
