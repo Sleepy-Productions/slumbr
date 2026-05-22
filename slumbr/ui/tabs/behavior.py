@@ -23,13 +23,16 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QHBoxLayout,
+    QLabel,
     QPushButton,
     QVBoxLayout,
     QWidget,
 )
 
+from ...audio.mirror import find_virtual_cables
 from ...config import SlumbrConfig
 from ...input.keymap import vk_label
+from ...theme import TEXT_SECONDARY, VIOLET_PRIMARY
 from ._widgets import field_hint, field_label, heading, scrollable, subheading
 
 
@@ -121,6 +124,70 @@ class BehaviorTab(QWidget):
         # Visibility-gate the keybind picker on the checkbox
         self._mute_key_btn.setEnabled(self._reverse_ptt_cb.isChecked())
 
+        # ----- Virtual mic routing (universal reverse-PTT)
+        layout.addSpacing(10)
+        layout.addWidget(field_label("Virtual mic routing (universal)"))
+        layout.addWidget(
+            field_hint(
+                "Pass your mic through a virtual cable (e.g. VB-Audio Virtual Cable) "
+                "and Slumbr will silence that cable during dictation. Works in every "
+                "call app — Zoom, Teams, Discord, OBS, browser calls. Set the call "
+                "app's mic to \"CABLE Output\" after installing."
+            )
+        )
+
+        # Status row: detected vs not detected.
+        self._cables = find_virtual_cables()
+        status_row = QHBoxLayout()
+        status_row.setSpacing(8)
+        status_dot = QLabel("●")
+        if self._cables:
+            status_dot.setStyleSheet(f"color: {VIOLET_PRIMARY}; font-size: 14px;")
+            status_text = QLabel(
+                f"Detected {len(self._cables)} virtual cable"
+                + ("s" if len(self._cables) > 1 else "")
+                + "."
+            )
+        else:
+            status_dot.setStyleSheet(f"color: {TEXT_SECONDARY}; font-size: 14px;")
+            status_text = QLabel(
+                'No virtual cable detected. <a href="https://vb-audio.com/Cable/" '
+                f'style="color: {VIOLET_PRIMARY};">Install VB-Cable</a> '
+                "(free, restart Slumbr after install)."
+            )
+            status_text.setOpenExternalLinks(True)
+            status_text.setTextInteractionFlags(Qt.TextBrowserInteraction)
+        status_text.setWordWrap(True)
+        status_row.addWidget(status_dot)
+        status_row.addWidget(status_text, stretch=1)
+        layout.addLayout(status_row)
+
+        self._mic_routing_cb = QCheckBox(
+            "Route my mic through a virtual cable"
+        )
+        self._mic_routing_cb.setChecked(config.mic_routing_enabled)
+        self._mic_routing_cb.toggled.connect(self._on_mic_routing_toggle)
+        self._mic_routing_cb.setEnabled(bool(self._cables))
+        layout.addWidget(self._mic_routing_cb)
+
+        cable_row = QHBoxLayout()
+        cable_row.setSpacing(10)
+        cable_row.setContentsMargins(0, 4, 0, 0)
+        cable_row.addWidget(field_label("Virtual cable:"))
+        self._cable_combo = QComboBox()
+        self._cable_combo.addItem("(none)", userData="")
+        for _idx, name in self._cables:
+            self._cable_combo.addItem(name, userData=name)
+        # Select previously-configured cable if it still exists.
+        if config.mic_routing_device_name:
+            i = self._cable_combo.findData(config.mic_routing_device_name)
+            if i >= 0:
+                self._cable_combo.setCurrentIndex(i)
+        self._cable_combo.currentIndexChanged.connect(self._on_cable_changed)
+        self._cable_combo.setEnabled(bool(self._cables))
+        cable_row.addWidget(self._cable_combo, stretch=1)
+        layout.addLayout(cable_row)
+
         layout.addStretch(1)
 
         outer = QVBoxLayout(self)
@@ -142,6 +209,15 @@ class BehaviorTab(QWidget):
 
     def _on_mute_key_captured(self, vk: int) -> None:
         self._config.reverse_ptt_vk = vk
+        self.config_changed.emit()
+
+    def _on_mic_routing_toggle(self, checked: bool) -> None:
+        self._config.mic_routing_enabled = checked
+        self.config_changed.emit()
+
+    def _on_cable_changed(self, *_args) -> None:
+        device = self._cable_combo.currentData() or ""
+        self._config.mic_routing_device_name = device
         self.config_changed.emit()
 
 

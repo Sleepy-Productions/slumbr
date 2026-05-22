@@ -117,10 +117,20 @@ class SlumbrConfig:
     # configures the same keybind in their call app's "Push To Mute"
     # (Discord) / equivalent. This is a workaround: Windows has no
     # per-app mic mute API, so we lean on the other app's own mute
-    # keybind. A virtual-audio-routing variant (works in any app) is
-    # tracked as a Phase 3 backlog item.
+    # keybind.
     reverse_ptt_enabled: bool = False
     reverse_ptt_vk: int = 0
+
+    # ----- Virtual mic routing (universal reverse-PTT, Phase 3) -----
+    # Slumbr passes the real-mic audio through a virtual cable device
+    # (VB-Audio Virtual Cable or similar). Call apps are pointed at the
+    # virtual cable as their mic input; during dictation Slumbr writes
+    # silence into the cable so other apps hear nothing while Slumbr
+    # keeps reading the real mic for transcription. Works in every app
+    # (Zoom / Teams / OBS / browser calls), not just Discord. Requires
+    # a one-time VB-Cable install from vb-audio.com.
+    mic_routing_enabled: bool = False
+    mic_routing_device_name: str = ""
 
     # ----- Window close policy (vestigial — the hub window is gone in
     # the May 2026 rearch, but the field remains so older configs load
