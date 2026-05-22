@@ -47,6 +47,7 @@ from .config import SlumbrConfig
 from .input.foreground import ForegroundTracker
 from .input.hotkey import Hotkey
 from .input.keymap import vk_label
+from .input.mute_key import MuteKeyController
 from .input.paste import paste_text
 from .polish import polish
 from .state import State, StateMachine
@@ -174,6 +175,13 @@ class SlumbrApp:
         # ----- Wall-clock anchor for end-to-end latency tracing.
         self._t_stop_pressed: float = 0.0
 
+        # ----- Reverse-PTT mute-key sender. Armed only if the user has
+        # both enabled the feature AND picked a VK to send. See
+        # ``slumbr/input/mute_key.py`` for the workaround rationale.
+        self.mute_key = MuteKeyController()
+        if self.config.reverse_ptt_enabled and self.config.reverse_ptt_vk:
+            self.mute_key.arm(self.config.reverse_ptt_vk)
+
         # ----- Settings dialog is built lazily on first open so startup
         # doesn't pay the cost for users who never touch it.
         self._settings_dialog: SettingsDialog | None = None
@@ -223,6 +231,9 @@ class SlumbrApp:
         t_toggle = time.monotonic()
         self._paste_target_hwnd = self.foreground.last_hwnd()
         log.info("IDLE -> RECORDING (target hwnd=%s)", self._paste_target_hwnd)
+        # Send the reverse-PTT mute key (e.g. Discord's PTM keybind)
+        # BEFORE we start capture so the other app silences us in time.
+        self.mute_key.press()
         self.popup.show_recording()
         try:
             self.recorder.start()
@@ -319,6 +330,9 @@ class SlumbrApp:
     def _reset_to_idle(self) -> None:
         self.state.try_transition(State.IDLE, force=True)
         log.debug("-> IDLE")
+        # Release the reverse-PTT mute key so the call app un-mutes
+        # the user. Idempotent: no-op if disarmed or not held.
+        self.mute_key.release()
         self.popup.hide_popup()
         self.tray.set_state(State.IDLE)
 
@@ -365,6 +379,11 @@ class SlumbrApp:
             )
         except Exception as e:  # noqa: BLE001
             log.warning("transcriber.set_runtime_config failed: %s", e)
+        # Re-arm (or disarm) the reverse-PTT mute key per the new config.
+        if self.config.reverse_ptt_enabled and self.config.reverse_ptt_vk:
+            self.mute_key.arm(self.config.reverse_ptt_vk)
+        else:
+            self.mute_key.disarm()
 
     def _on_hotkey_changed(self, vk: int) -> None:
         log.info("hotkey rebound to %s (vk=%#x)", vk_label(vk), vk)
@@ -374,6 +393,10 @@ class SlumbrApp:
     # ------------------------------------------------------------------ exit
     def _on_quit(self) -> None:
         log.info("quit requested")
+        # Belt-and-suspenders: make sure we don't exit with the mute
+        # key still virtually held (would leave the user muted in
+        # their call until they manually pressed it themselves).
+        self.mute_key.release()
         self.hotkey.stop()
         self.foreground.stop()
         if self.recorder.is_recording():
