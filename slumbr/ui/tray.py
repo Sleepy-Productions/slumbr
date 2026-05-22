@@ -73,11 +73,13 @@ class SlumbrTray:
         on_toggle: Callable[[], None],
         on_settings: Callable[[], None],
         on_quit: Callable[[], None],
+        on_restart: Callable[[], None],
         hotkey_label: str = "Caps Lock",
     ) -> None:
         self._on_toggle = on_toggle
         self._on_settings = on_settings
         self._on_quit = on_quit
+        self._on_restart = on_restart
         self._icon: pystray.Icon | None = None
         self._state = State.IDLE
         self._hotkey_label = hotkey_label
@@ -113,6 +115,9 @@ class SlumbrTray:
                 lambda _icon, _item: self._on_settings(),
             ),
             pystray.Menu.SEPARATOR,
+            pystray.MenuItem(
+                "Restart Slumbr", lambda _icon, _item: self._on_restart()
+            ),
             pystray.MenuItem(
                 "Quit Slumbr", lambda _icon, _item: self._on_quit()
             ),
