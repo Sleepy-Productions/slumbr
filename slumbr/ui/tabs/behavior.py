@@ -100,6 +100,14 @@ class BehaviorTab(QWidget):
         self._preserve_cb.toggled.connect(self._on_changed)
         layout.addWidget(self._preserve_cb)
 
+        # Compact popup (visualizer only — no live word preview)
+        self._compact_popup_cb = QCheckBox(
+            "Compact recording popup (audio bars only — no word preview)"
+        )
+        self._compact_popup_cb.setChecked(config.compact_popup)
+        self._compact_popup_cb.toggled.connect(self._on_compact_popup_toggle)
+        layout.addWidget(self._compact_popup_cb)
+
         # ----- Reverse PTT
         layout.addSpacing(10)
         layout.addWidget(field_label("Reverse PTT (mute external apps while dictating)"))
@@ -240,6 +248,10 @@ class BehaviorTab(QWidget):
     def _on_cable_changed(self, *_args) -> None:
         device = self._cable_combo.currentData() or ""
         self._config.mic_routing_device_name = device
+        self.config_changed.emit()
+
+    def _on_compact_popup_toggle(self, checked: bool) -> None:
+        self._config.compact_popup = checked
         self.config_changed.emit()
 
     def _on_install_vbcable(self) -> None:

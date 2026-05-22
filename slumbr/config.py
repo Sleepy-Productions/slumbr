@@ -121,6 +121,14 @@ class SlumbrConfig:
     reverse_ptt_enabled: bool = False
     reverse_ptt_vk: int = 0
 
+    # ----- Recording popup look -----
+    # ``compact_popup=True`` strips the popup down to just the audio
+    # visualizer — no status dot, no elapsed-time label, no live
+    # partial-transcript panel. For users who find the live word
+    # preview distracting and just want a glanceable "yes mic is live"
+    # indicator.
+    compact_popup: bool = False
+
     # ----- Virtual mic routing (universal reverse-PTT, Phase 3) -----
     # Slumbr passes the real-mic audio through a virtual cable device
     # (VB-Audio Virtual Cable or similar). Call apps are pointed at the

@@ -57,6 +57,12 @@ _POPUP_H = 40
 # the popup never lurches sideways mid-utterance.
 _POPUP_W_EXPANDED = 360
 _POPUP_H_EXPANDED = 92
+# ``compact mode`` (Settings → Behavior → "Compact recording popup"): the popup
+# strips down to just the audio visualizer — no status dot, no elapsed label,
+# no partial-transcript panel. Smaller window, no expansion when partials
+# arrive. For users who find the live word preview distracting.
+_POPUP_W_COMPACT = 140
+_POPUP_H_COMPACT = 26
 # Trim long partials from the head so the most recent words are always
 # visible — chars not words because the partial can include long unbroken
 # strings (URLs, etc).
@@ -488,6 +494,13 @@ class RecordingPopup(QWidget):
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
         self.setAttribute(Qt.WA_ShowWithoutActivating)
         self.setFixedSize(_POPUP_W, _POPUP_H)
+        # Compact mode = just the visualizer. Set via ``set_compact``
+        # from app.py at startup + on config change. Affects:
+        #   - dot + elapsed label + partial panel visibility
+        #   - popup window size
+        #   - whether ``set_partial`` does anything
+        #   - target size used by the collapse / expand animation
+        self._compact = False
 
         # Smooth resize animation state. The popup eases between compact
         # and expanded shapes over `_RESIZE_DURATION_S` with an ease-out
@@ -599,7 +612,11 @@ class RecordingPopup(QWidget):
         at the dim opacity. An empty (committed, tentative) collapses the
         partial area. Popup is NOT repositioned mid-utterance — anchoring
         only happens on show_recording / show_transcribing.
+
+        No-op in compact mode — the partial panel doesn't exist there.
         """
+        if self._compact:
+            return
         committed = committed.strip()
         tentative = tentative.strip()
         if not committed and not tentative:
@@ -619,20 +636,66 @@ class RecordingPopup(QWidget):
         self._collapse_partial()
         self.hide()
 
+    def set_compact(self, compact: bool) -> None:
+        """Toggle the just-the-bars compact look.
+
+        Hides the status dot, the elapsed-time label, and the partial-
+        transcript panel; tightens layout margins; resizes the popup
+        to the compact dimensions. Idempotent — calling with the
+        current value is a no-op. Safe to call at any time including
+        while the popup is visible.
+        """
+        if compact == self._compact:
+            return
+        self._compact = compact
+        self._dot.setVisible(not compact)
+        self._elapsed_label.setVisible(not compact)
+        # The partial panel is permanently hidden in compact mode and
+        # only conditionally visible in normal mode — set_partial /
+        # _collapse_partial flip its visibility there.
+        self._partial.setVisible(False)
+        if compact:
+            self._partial.clear()
+        # Tighten margins so the visualizer fills the small frame.
+        layout = self.layout()
+        if layout is not None:
+            if compact:
+                layout.setContentsMargins(8, 3, 8, 3)
+            else:
+                layout.setContentsMargins(12, 6, 12, 6)
+        # Snap to the new resting size — a config change is a one-shot
+        # event, not the per-utterance breathing the animation is for.
+        self._resize_timer.stop()
+        self.setMinimumSize(0, 0)
+        self.setMaximumSize(16777215, 16777215)
+        w, h = self._resting_size()
+        self.setFixedSize(w, h)
+        # If we're currently visible, re-anchor so the change doesn't
+        # leave the popup mid-screen at the wrong size.
+        if self.isVisible():
+            self._reposition()
+
     # ------------------------------------------------------------- internal
+    def _resting_size(self) -> tuple[int, int]:
+        """Width / height the popup returns to between partials."""
+        if self._compact:
+            return _POPUP_W_COMPACT, _POPUP_H_COMPACT
+        return _POPUP_W, _POPUP_H
+
     def _collapse_partial(self, animated: bool = True) -> None:
-        """Shrink back to the compact shape. Animate when called
+        """Shrink back to the resting shape. Animate when called
         mid-session (a graceful end-of-utterance); snap when called
         from show_recording (the popup isn't visible yet)."""
         self._partial.clear()
         self._partial.setVisible(False)
-        if animated and self.isVisible() and self.size().width() != _POPUP_W:
-            self._animate_resize_to(_POPUP_W, _POPUP_H)
+        target_w, target_h = self._resting_size()
+        if animated and self.isVisible() and self.size().width() != target_w:
+            self._animate_resize_to(target_w, target_h)
         else:
             self._resize_timer.stop()
             self.setMinimumSize(0, 0)
             self.setMaximumSize(16777215, 16777215)
-            self.setFixedSize(_POPUP_W, _POPUP_H)
+            self.setFixedSize(target_w, target_h)
 
     def _animate_resize_to(self, target_w: int, target_h: int) -> None:
         """Smoothly resize the popup, keeping the bottom edge anchored.
