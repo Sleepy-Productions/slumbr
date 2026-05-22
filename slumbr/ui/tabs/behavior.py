@@ -192,11 +192,16 @@ class BehaviorTab(QWidget):
         self._cable_combo.addItem("(none)", userData="")
         for _idx, name in self._cables:
             self._cable_combo.addItem(name, userData=name)
-        # Select previously-configured cable if it still exists.
+        # Select previously-configured cable if it still exists,
+        # otherwise auto-pick the first detected cable so the user
+        # only has to flip the checkbox to enable routing.
         if config.mic_routing_device_name:
             i = self._cable_combo.findData(config.mic_routing_device_name)
             if i >= 0:
                 self._cable_combo.setCurrentIndex(i)
+        elif self._cables:
+            # Index 0 is "(none)"; first real cable is at index 1.
+            self._cable_combo.setCurrentIndex(1)
         self._cable_combo.currentIndexChanged.connect(self._on_cable_changed)
         self._cable_combo.setEnabled(bool(self._cables))
         cable_row.addWidget(self._cable_combo, stretch=1)
