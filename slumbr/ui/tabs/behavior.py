@@ -18,11 +18,12 @@ backlog item.
 from __future__ import annotations
 
 from PySide6.QtCore import QEvent, Qt, QThread, Signal
-from PySide6.QtGui import QKeyEvent
+from PySide6.QtGui import QFont, QKeyEvent
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDialog,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QPlainTextEdit,
@@ -54,8 +55,8 @@ class BehaviorTab(QWidget):
 
         body = QWidget()
         layout = QVBoxLayout(body)
-        layout.setContentsMargins(56, 48, 56, 48)
-        layout.setSpacing(22)
+        layout.setContentsMargins(40, 28, 40, 28)
+        layout.setSpacing(16)
 
         layout.addWidget(heading("Behavior", size=28))
         layout.addWidget(
@@ -65,8 +66,9 @@ class BehaviorTab(QWidget):
             )
         )
 
-        # Paste method
-        layout.addWidget(field_label("Paste method"))
+        # ===== Section: Pasting =====
+        _card, sl = self._section("Pasting")
+        sl.addWidget(field_label("Paste method"))
         self._paste_combo = QComboBox()
         self._paste_combo.addItem(
             "Ctrl+V — chats, browsers, editors (fastest)", userData="ctrl_v"
@@ -82,65 +84,60 @@ class BehaviorTab(QWidget):
         if i >= 0:
             self._paste_combo.setCurrentIndex(i)
         self._paste_combo.currentIndexChanged.connect(self._on_changed)
-        layout.addWidget(self._paste_combo)
+        sl.addWidget(self._paste_combo)
 
-        # Auto-send
         self._auto_send_cb = QCheckBox(
             "Press Enter after pasting (auto-send for chat apps)"
         )
         self._auto_send_cb.setChecked(config.auto_send)
         self._auto_send_cb.toggled.connect(self._on_changed)
-        layout.addWidget(self._auto_send_cb)
+        sl.addWidget(self._auto_send_cb)
 
-        # Preserve clipboard
         self._preserve_cb = QCheckBox(
             "Restore previous clipboard contents after pasting"
         )
         self._preserve_cb.setChecked(config.preserve_clipboard)
         self._preserve_cb.toggled.connect(self._on_changed)
-        layout.addWidget(self._preserve_cb)
+        sl.addWidget(self._preserve_cb)
+        layout.addWidget(_card)
 
-        # Compact popup (visualizer only — no live word preview)
+        # ===== Section: Recording popup =====
+        _card, sl = self._section("Recording popup")
         self._compact_popup_cb = QCheckBox(
             "Compact recording popup (audio bars only — no word preview)"
         )
         self._compact_popup_cb.setChecked(config.compact_popup)
         self._compact_popup_cb.toggled.connect(self._on_compact_popup_toggle)
-        layout.addWidget(self._compact_popup_cb)
+        sl.addWidget(self._compact_popup_cb)
 
-        # Cursor-follow popup
         self._follow_cursor_cb = QCheckBox(
             "Popup follows the mouse cursor while recording"
         )
         self._follow_cursor_cb.setChecked(config.popup_follow_cursor)
         self._follow_cursor_cb.toggled.connect(self._on_follow_cursor_toggle)
-        layout.addWidget(self._follow_cursor_cb)
-        layout.addWidget(
+        sl.addWidget(self._follow_cursor_cb)
+        sl.addWidget(
             field_hint(
                 "Off by default — if you dictate into a terminal, mouse motion "
                 "events can leak as garbage text into your transcript."
             )
         )
+        layout.addWidget(_card)
 
-        # ----- Reverse PTT
-        layout.addSpacing(10)
-        layout.addWidget(field_label("Reverse PTT (mute external apps while dictating)"))
-        layout.addWidget(
+        # ===== Section: Reverse PTT =====
+        _card, sl = self._section("Reverse PTT — mute external apps while dictating")
+        sl.addWidget(
             field_hint(
                 "Slumbr presses a chosen key during dictation so apps like Discord "
                 "(via its Push-To-Mute setting) silence your mic externally while "
                 "Slumbr keeps capturing internally. Configure the matching keybind "
-                "in the other app first. Universal multi-app reverse-PTT (via "
-                "virtual mic routing) is on the roadmap."
+                "in the other app first. The universal version is below."
             )
         )
-
-        self._reverse_ptt_cb = QCheckBox(
-            "Enable reverse PTT during dictation"
-        )
+        self._reverse_ptt_cb = QCheckBox("Enable reverse PTT during dictation")
         self._reverse_ptt_cb.setChecked(config.reverse_ptt_enabled)
         self._reverse_ptt_cb.toggled.connect(self._on_reverse_ptt_toggle)
-        layout.addWidget(self._reverse_ptt_cb)
+        sl.addWidget(self._reverse_ptt_cb)
 
         row = QHBoxLayout()
         row.setSpacing(10)
@@ -150,15 +147,13 @@ class BehaviorTab(QWidget):
         self._mute_key_btn.key_captured.connect(self._on_mute_key_captured)
         row.addWidget(self._mute_key_btn)
         row.addStretch(1)
-        layout.addLayout(row)
-
-        # Visibility-gate the keybind picker on the checkbox
+        sl.addLayout(row)
         self._mute_key_btn.setEnabled(self._reverse_ptt_cb.isChecked())
+        layout.addWidget(_card)
 
-        # ----- Virtual mic routing (universal reverse-PTT)
-        layout.addSpacing(10)
-        layout.addWidget(field_label("Virtual mic routing (universal)"))
-        layout.addWidget(
+        # ===== Section: Virtual mic routing =====
+        _card, sl = self._section("Virtual mic routing — universal")
+        sl.addWidget(
             field_hint(
                 "Pass your mic through a virtual cable (e.g. VB-Audio Virtual Cable) "
                 "and Slumbr will silence that cable during dictation. Works in every "
@@ -167,7 +162,6 @@ class BehaviorTab(QWidget):
             )
         )
 
-        # Status row: detected vs not detected.
         self._cables = find_virtual_cables()
         status_row = QHBoxLayout()
         status_row.setSpacing(8)
@@ -175,7 +169,7 @@ class BehaviorTab(QWidget):
         if self._cables:
             status_dot.setStyleSheet(f"color: {VIOLET_PRIMARY}; font-size: 14px;")
             status_text = QLabel(
-                f"Detected {len(self._cables)} virtual cable"
+                f"Detected {len(self._cables)} usable virtual cable"
                 + ("s" if len(self._cables) > 1 else "")
                 + "."
             )
@@ -188,23 +182,20 @@ class BehaviorTab(QWidget):
         status_text.setWordWrap(True)
         status_row.addWidget(status_dot)
         status_row.addWidget(status_text, stretch=1)
-        layout.addLayout(status_row)
+        sl.addLayout(status_row)
 
-        # "Install VB-Cable for me" button (only when nothing is detected).
         if not self._cables:
             self._install_btn = QPushButton("Install VB-Cable")
             self._install_btn.setObjectName("primary")
             self._install_btn.setMaximumWidth(220)
             self._install_btn.clicked.connect(self._on_install_vbcable)
-            layout.addWidget(self._install_btn)
+            sl.addWidget(self._install_btn)
 
-        self._mic_routing_cb = QCheckBox(
-            "Route my mic through a virtual cable"
-        )
+        self._mic_routing_cb = QCheckBox("Route my mic through a virtual cable")
         self._mic_routing_cb.setChecked(config.mic_routing_enabled)
         self._mic_routing_cb.toggled.connect(self._on_mic_routing_toggle)
         self._mic_routing_cb.setEnabled(bool(self._cables))
-        layout.addWidget(self._mic_routing_cb)
+        sl.addWidget(self._mic_routing_cb)
 
         cable_row = QHBoxLayout()
         cable_row.setSpacing(10)
@@ -230,13 +221,35 @@ class BehaviorTab(QWidget):
         self._cable_combo.currentIndexChanged.connect(self._on_cable_changed)
         self._cable_combo.setEnabled(bool(self._cables))
         cable_row.addWidget(self._cable_combo, stretch=1)
-        layout.addLayout(cable_row)
+        sl.addLayout(cable_row)
+        layout.addWidget(_card)
 
         layout.addStretch(1)
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.addWidget(scrollable(body))
+
+    def _section(self, title: str) -> tuple[QFrame, QVBoxLayout]:
+        """A titled card that groups related settings — gives the tab clear
+        visual structure instead of one flat wall of checkboxes."""
+        card = QFrame()
+        card.setObjectName("sectionCard")
+        card.setStyleSheet(
+            f"QFrame#sectionCard {{ background: {BG_PANEL}; border: 1px solid {BORDER}; "
+            f"border-radius: 12px; }}"
+        )
+        v = QVBoxLayout(card)
+        v.setContentsMargins(20, 14, 20, 16)
+        v.setSpacing(10)
+        hdr = QLabel(title)
+        hf = QFont()
+        hf.setPointSize(12)
+        hf.setBold(True)
+        hdr.setFont(hf)
+        hdr.setStyleSheet(f"color: {TEXT_PRIMARY};")
+        v.addWidget(hdr)
+        return card, v
 
     def _on_changed(self, *_args) -> None:
         method = self._paste_combo.currentData()

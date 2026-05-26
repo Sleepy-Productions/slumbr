@@ -1,13 +1,17 @@
-"""Visual keyboard widget for binding the dictation hotkey.
+"""Visual keyboard widget for binding the dictation hotkey combo.
 
-Renders a full ANSI layout. Click any non-disabled key and we emit a
-`key_chosen(int)` signal carrying the VK code. The currently-bound key
-is highlighted in violet; disabled keys (modifiers, Backspace, Enter,
-etc.) are muted and inert because they'd be terrible choices for a
-single-key tap-to-toggle.
+Renders a full ANSI layout. Click keys to build a combo of 1–4 keys
+(e.g. Ctrl + Shift + J); click a selected key again to remove it. Emits
+``combo_changed(list[int])`` with the normalized VK codes. Selected keys
+highlight in violet; a small set of keys (Esc / Enter / Tab / Backspace)
+stay inert because binding them as a trigger is a footgun.
 
-This widget is presentation-only — it knows nothing about the hotkey
-hook. The hub binds it to `SlumbrConfig.hotkey_vk` and the Hotkey class.
+Modifiers (Ctrl / Shift / Alt / Win) ARE selectable now — that's the
+point of combos. The hook passes them through normally and only consumes
+the trigger key when the combo completes (see ``input/hotkey.py``).
+
+Presentation-only — it knows nothing about the hook. The Shortcuts tab
+wires it to ``SlumbrConfig.hotkey_vks`` and the ``Hotkey`` class.
 """
 
 from __future__ import annotations
@@ -24,9 +28,12 @@ from PySide6.QtWidgets import (
 )
 
 from ..input.keymap import (
-    DISABLED_VKS,
+    COMBO_DISABLED_VKS,
     LAYOUT_MAIN,
-    vk_label,
+    MAX_COMBO_KEYS,
+    combo_label,
+    normalize_modifier,
+    reserved_combo_name,
 )
 from ..theme import (
     BG_PANEL,
@@ -38,14 +45,13 @@ from ..theme import (
     VIOLET_PRIMARY,
 )
 
-# Base unit (one "1U" key in px). Tuned for a 900-ish-wide layout that
-# breathes. Adjust this single number to scale the whole keyboard.
-_U = 52
-_GAP = 6
+# Base unit (one "1U" key in px). Adjust this single number to scale the
+# whole keyboard. Trimmed from 52 → 40 so the picker isn't bulky.
+_U = 40
+_GAP = 5
 
 
 # Visual weights — how many units wide each variable-width key is.
-# Keys not listed default to 1.0 U.
 _WEIGHT: dict[str, float] = {
     "Backspace": 2.0,
     "Tab": 1.5,
@@ -79,9 +85,9 @@ class _KeyButton(QPushButton):
         self.setCursor(Qt.PointingHandCursor)
         self._set_state("idle")
         f = QFont()
-        f.setPointSize(10)
+        f.setPointSize(9)
         self.setFont(f)
-        if vk in DISABLED_VKS:
+        if normalize_modifier(vk) in COMBO_DISABLED_VKS or vk in COMBO_DISABLED_VKS:
             self.setEnabled(False)
             self.setCursor(Qt.ForbiddenCursor)
 
@@ -94,7 +100,6 @@ class _KeyButton(QPushButton):
         return self._vk
 
     def _set_state(self, state: str) -> None:
-        # `state` ∈ {"idle", "selected"}. QSS reads this via [data-state="..."].
         self.setProperty("data-state", state)
         self.style().unpolish(self)
         self.style().polish(self)
@@ -147,14 +152,14 @@ QPushButton[data-state="selected"]:hover {{
 
 
 class KeyboardPicker(QWidget):
-    """Click a key to bind it. Emits the chosen VK code."""
+    """Click keys to build a 1–4 key combo. Emits the chosen VK list."""
 
-    key_chosen = Signal(int)
+    combo_changed = Signal(list)  # list[int] of normalized VKs
 
-    def __init__(self, current_vk: int) -> None:
+    def __init__(self, current_vks: list[int]) -> None:
         super().__init__()
         self._buttons: list[_KeyButton] = []
-        self._current_vk = current_vk
+        self._combo: list[int] = [normalize_modifier(v) for v in current_vks if v]
 
         frame = QFrame()
         frame.setObjectName("keyboard-frame")
@@ -168,8 +173,6 @@ class KeyboardPicker(QWidget):
             row_layout = QHBoxLayout()
             row_layout.setSpacing(_GAP)
             row_layout.setContentsMargins(0, 0, 0, 0)
-            # Some rows (the Shift row) need to be flush-left + flush-right
-            # rather than spread; the bottom row centers Space.
             for vk, label, sub in row:
                 btn = _KeyButton(vk, label, sub)
                 if btn.isEnabled():
@@ -183,8 +186,6 @@ class KeyboardPicker(QWidget):
         outer.setContentsMargins(0, 0, 0, 0)
         outer.addWidget(frame)
 
-        # Current binding caption (lives below the keyboard so users see
-        # what's bound without having to scan the highlight).
         self._caption = QLabel()
         cf = QFont()
         cf.setPointSize(10)
@@ -195,21 +196,34 @@ class KeyboardPicker(QWidget):
         self._refresh_selection()
 
     def _on_key_clicked(self, btn: _KeyButton) -> None:
-        if btn.vk() == self._current_vk:
-            return  # no-op rebind
-        self._current_vk = btn.vk()
+        vk = normalize_modifier(btn.vk())
+        if vk in self._combo:
+            # Toggle off — but never leave the combo empty.
+            if len(self._combo) > 1:
+                self._combo.remove(vk)
+        elif len(self._combo) < MAX_COMBO_KEYS:
+            # Refuse combos Windows owns (Win+L, Alt+F4, Ctrl+Alt+Del, …) —
+            # we'd half-break them or couldn't hook them at all.
+            reserved = reserved_combo_name(self._combo + [vk])
+            if reserved is not None:
+                self._caption.setText(
+                    f"⚠  {reserved} is reserved by Windows — pick a different combo."
+                )
+                return
+            self._combo.append(vk)
+        else:
+            # At the 4-key cap — ignore further additions.
+            return
         self._refresh_selection()
-        self.key_chosen.emit(btn.vk())
+        self.combo_changed.emit(list(self._combo))
 
     def _refresh_selection(self) -> None:
-        # `Shift` and `Ctrl` etc. appear twice (left + right) and share a
-        # VK in our keymap — both should highlight when "selected", though
-        # they're disabled anyway.
         for btn in self._buttons:
-            btn.mark_selected(btn.vk() == self._current_vk)
-        self._caption.setText(f"Currently bound: {vk_label(self._current_vk)}")
+            btn.mark_selected(normalize_modifier(btn.vk()) in self._combo)
+        full = " — combo full" if len(self._combo) >= MAX_COMBO_KEYS else ""
+        self._caption.setText(f"Currently bound: {combo_label(self._combo)}{full}")
 
-    def set_current_vk(self, vk: int) -> None:
-        """External setter — keeps the keyboard in sync if config changes elsewhere."""
-        self._current_vk = vk
+    def set_current_combo(self, vks: list[int]) -> None:
+        """External setter — keep the keyboard in sync if config changes elsewhere."""
+        self._combo = [normalize_modifier(v) for v in vks if v]
         self._refresh_selection()

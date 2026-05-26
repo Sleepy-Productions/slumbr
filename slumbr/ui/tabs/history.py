@@ -1,4 +1,4 @@
-"""History tab — last 50 transcripts with timestamps.
+"""History tab — last 30 transcripts with timestamps.
 
 Replaces the "Last transcript" surface the old HomePanel owned. Entries
 live at ``%APPDATA%\\Slumbr\\history.jsonl`` (see ``slumbr/history.py``).
@@ -49,8 +49,8 @@ class HistoryTab(QWidget):
 
         layout.addWidget(
             subheading(
-                "The last 50 transcripts Slumbr has produced. Local only — never "
-                "sent anywhere."
+                "The last 30 transcripts Slumbr has produced — older ones clear "
+                "automatically. Local only, never sent anywhere."
             )
         )
 

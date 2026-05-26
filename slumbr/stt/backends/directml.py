@@ -50,6 +50,11 @@ _HF_MODEL_MAP: dict[str, str] = {
     "medium": "openai/whisper-medium.en",
     "large-v3": "openai/whisper-large-v3",
     "large-v3-turbo": "openai/whisper-large-v3-turbo",
+    # distil-large-v3 lives under the distil-whisper org, NOT openai/ — so
+    # it needs an explicit entry (the f"openai/whisper-{model}" fallback
+    # would build a non-existent repo id). Standard WhisperForConditional-
+    # Generation arch, so optimum's ONNX export handles it like any Whisper.
+    "distil-large-v3": "distil-whisper/distil-large-v3",
 }
 
 

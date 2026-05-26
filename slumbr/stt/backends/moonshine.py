@@ -27,7 +27,7 @@ import numpy as np
 
 # Borrow the model download helpers from the streaming engine so the
 # wizard's "first launch downloads models" UX stays in one place.
-from ..streaming_engine import _ensure_moonshine, _ensure_punct
+from ..streaming_engine import _build_punct, _ensure_moonshine
 
 if TYPE_CHECKING:
     from ...config import BackendConfig
@@ -54,9 +54,15 @@ class MoonshineTranscriber:
         import sherpa_onnx  # noqa: PLC0415
 
         threads = cfg.threads if cfg.threads and cfg.threads > 0 else 4
-        log.info("loading Moonshine offline recognizer (%d threads)...", threads)
+        # cfg.model is e.g. "moonshine-base-en-int8" / "moonshine-tiny-en-int8".
+        # Only base + tiny exist in the sherpa-onnx zoo; anything else
+        # (incl. the legacy default) resolves to base.
+        variant = "tiny" if "tiny" in (cfg.model or "").lower() else "base"
+        log.info(
+            "loading Moonshine %s offline recognizer (%d threads)...", variant, threads
+        )
         t0 = time.monotonic()
-        files = _ensure_moonshine()
+        files = _ensure_moonshine(variant)
         self._recognizer = sherpa_onnx.OfflineRecognizer.from_moonshine(
             preprocessor=files["preprocess.onnx"],
             encoder=files["encode.int8.onnx"],
@@ -68,24 +74,22 @@ class MoonshineTranscriber:
         )
         log.info("Moonshine loaded in %.2fs", time.monotonic() - t0)
 
-        # Punctuator is best-effort. If the download fails (rare) we
-        # still ship output — just lowercase + no commas. Worse but
-        # not broken.
+        # Punctuator is best-effort. Reuse the streaming engine's proven
+        # ``_build_punct`` rather than hand-rolling the sherpa-onnx config:
+        # the ``OnlinePunctuationConfig`` constructor shape differs across
+        # sherpa-onnx versions (the old hand-rolled ``model=`` kwarg here
+        # raised on the installed wheel, silently dropping ALL punctuation
+        # + casing). ``_build_punct`` is the version the popup partials
+        # already use successfully. None → lowercase output, not broken.
         self._punct = None
-        punct_paths = _ensure_punct()
-        if punct_paths:
-            try:
-                model_path, vocab_path = punct_paths
-                cfg_obj = sherpa_onnx.OnlinePunctuationConfig(
-                    model=sherpa_onnx.OnlinePunctuationModelConfig(
-                        cnn_bilstm=model_path,
-                        bpe_vocab=vocab_path,
-                    )
-                )
-                self._punct = sherpa_onnx.OnlinePunctuation(cfg_obj)
+        try:
+            self._punct = _build_punct(threads)
+            if self._punct is not None:
                 log.info("Moonshine punctuator ready")
-            except Exception as e:  # noqa: BLE001
-                log.warning("punctuator init failed; output will be lowercase: %s", e)
+            else:
+                log.warning("punctuator unavailable; output will be lowercase")
+        except Exception as e:  # noqa: BLE001
+            log.warning("punctuator init failed; output will be lowercase: %s", e)
 
         # initial_prompt is recognised by Whisper but not by Moonshine;
         # we keep the field for parity so set_runtime_config doesn't

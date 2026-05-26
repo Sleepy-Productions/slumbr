@@ -81,6 +81,28 @@ class WhisperEngine:
         # prior context, so words / names / jargon that appear in the
         # prompt are far more likely to be recognized correctly. This is
         # the single highest-leverage accuracy knob for uncommon words.
+        # Anti-repetition controls — load-bearing for long dictations.
+        # Observed in the prototype logs (2026-05-25): a 97 s utterance
+        # decoded in 13.4 s (RTF 0.14, ~4x the 0.035 baseline) and came
+        # out garbled — "they're not able to do that because they're not
+        # able to do that" repeated five times. That's the classic
+        # faster-whisper spiral: with condition_on_previous_text=True
+        # (the default), each segment's output is fed back as the prompt
+        # for the next, so once the decoder slips into a loop it keeps
+        # re-priming itself. The loop also inflates decode time because
+        # beam search churns over the repeated tokens — which is why long
+        # messages "freeze before they send."
+        #
+        # - condition_on_previous_text=False: breaks the cross-segment
+        #   feedback. Only affects multi-segment (long) audio, so short
+        #   utterances — which already transcribe accurately — are
+        #   unchanged. This is the highest-leverage knob.
+        # - no_repeat_ngram_size=3: hard-blocks regenerating any 3-token
+        #   span already emitted. Catches long repeated phrases without
+        #   touching natural short repeats ("no no no" is 1-grams; a
+        #   4th "really" is the most it will clip).
+        # - repetition_penalty=1.15: gentle logit nudge away from loops;
+        #   discourages without hard-blocking.
         segments, _info = self.model.transcribe(
             audio,
             language=self.language,
@@ -92,6 +114,9 @@ class WhisperEngine:
             },
             beam_size=beam_size,
             initial_prompt=self.initial_prompt,
+            condition_on_previous_text=False,
+            no_repeat_ngram_size=3,
+            repetition_penalty=1.15,
         )
         return " ".join(seg.text.strip() for seg in segments).strip()
 

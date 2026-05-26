@@ -48,7 +48,7 @@ from .bootstrap.install import relaunch_slumbr
 from .config import SlumbrConfig
 from .input.foreground import ForegroundTracker
 from .input.hotkey import Hotkey
-from .input.keymap import vk_label
+from .input.keymap import combo_label
 from .input.mute_key import MuteKeyController
 from .input.paste import paste_text
 from .polish import polish
@@ -173,13 +173,13 @@ class SlumbrApp:
             on_restart=self.bridge.restart_requested.emit,
             config=self.config,
             on_quick_toggle=self.bridge.quick_toggle.emit,
-            hotkey_label=vk_label(self.config.hotkey_vk),
+            hotkey_label=combo_label(self.config.hotkey_vks),
         )
         self.tray.start()
 
-        # ----- Hotkey hook (low-level WH_KEYBOARD_LL).
+        # ----- Hotkey hook (low-level WH_KEYBOARD_LL). Accepts a 1–4 key combo.
         self.hotkey = Hotkey(
-            vk=self.config.hotkey_vk,
+            vks=self.config.hotkey_vks,
             on_press=lambda: self.bridge.toggle.emit("hotkey"),
         )
         self.hotkey.start()
@@ -217,7 +217,7 @@ class SlumbrApp:
 
         log.info(
             "ready. Tap %s to start/stop. Quit from the tray.",
-            vk_label(self.config.hotkey_vk),
+            combo_label(self.config.hotkey_vks),
         )
 
     # ------------------------------------------------------- audio chunk hop
@@ -329,7 +329,11 @@ class SlumbrApp:
     def _on_transcribed(self, text: str) -> None:
         t_done = time.monotonic()
         raw = text.strip()
-        polished = polish(raw)
+        polished = polish(
+            raw,
+            replacements=self.config.word_replacements,
+            strip_filler=self.config.strip_trailing_filler,
+        )
         log.info("transcript: %r", polished)
         log.debug("raw=%r polished=%r", raw, polished)
         if not polished:
@@ -401,6 +405,7 @@ class SlumbrApp:
                 on_config_changed=self._on_config_changed,
                 on_hotkey_changed=self._on_hotkey_changed,
                 on_quit=self._on_quit,
+                on_restart=self.bridge.restart_requested.emit,
                 app_icon=self._app_icon,
             )
         return self._settings_dialog
@@ -457,9 +462,11 @@ class SlumbrApp:
         """
         if not self.config.mic_routing_enabled:
             return
+        from .audio.mirror import find_virtual_cables  # noqa: PLC0415
         device = self.config.mic_routing_device_name
+
+        # No device saved yet → auto-pick the best detected cable.
         if not device:
-            from .audio.mirror import find_virtual_cables  # noqa: PLC0415
             cables = find_virtual_cables()
             if not cables:
                 log.info(
@@ -468,26 +475,48 @@ class SlumbrApp:
                 )
                 return
             device = cables[0][1]
-            self.config.mic_routing_device_name = device
-            try:
-                self.config.save()
-            except Exception as e:  # noqa: BLE001
-                log.warning("config save during mic_routing auto-pick failed: %s", e)
+            self._save_mic_routing_device(device)
             log.info("mic_routing auto-picked device: %r", device)
+
+        if self._open_mic_mirror_device(device):
+            return
+
+        # The configured device failed (e.g. a WDM-KS-only "cable" that
+        # can't do blocking writes, or one that was uninstalled). Rather
+        # than stay dead until the user notices, fall forward to the best
+        # *working* cable detection offers — and persist the switch so we
+        # don't fail the same way next launch.
+        alternatives = [c for c in find_virtual_cables() if c[1] != device]
+        if alternatives:
+            alt = alternatives[0][1]
+            log.warning("mic routing device %r unusable — falling forward to %r", device, alt)
+            if self._open_mic_mirror_device(alt):
+                self._save_mic_routing_device(alt)
+                return
+        log.warning(
+            "could not open any usable mic mirror (configured=%r); routing "
+            "disabled until next config change",
+            device,
+        )
+        self.mic_mirror = None
+
+    def _open_mic_mirror_device(self, device: str) -> bool:
+        """Try to open + start the mirror on ``device``. Returns success."""
         try:
-            self.mic_mirror = MicMirror(
-                device,
-                samplerate=SAMPLE_RATE,
-                channels=1,
-            )
+            self.mic_mirror = MicMirror(device, samplerate=SAMPLE_RATE, channels=1)
             self.mic_mirror.start()
+            return True
         except Exception as e:  # noqa: BLE001
-            log.warning(
-                "could not open mic mirror for %r (%s); routing disabled until next "
-                "config change",
-                device, e,
-            )
+            log.warning("could not open mic mirror for %r (%s)", device, e)
             self.mic_mirror = None
+            return False
+
+    def _save_mic_routing_device(self, device: str) -> None:
+        self.config.mic_routing_device_name = device
+        try:
+            self.config.save()
+        except Exception as e:  # noqa: BLE001
+            log.warning("config save during mic_routing update failed: %s", e)
 
     def _reconcile_mic_mirror(self) -> None:
         """Hot-reconcile the running mirror with the current config.
@@ -522,10 +551,21 @@ class SlumbrApp:
             self.mic_mirror = None
             self._try_open_mic_mirror()
 
-    def _on_hotkey_changed(self, vk: int) -> None:
-        log.info("hotkey rebound to %s (vk=%#x)", vk_label(vk), vk)
-        self.hotkey.set_vk(vk)
-        self.tray.set_hotkey_label(vk_label(vk))
+    def _on_hotkey_changed(self, vks: list[int]) -> None:
+        if not vks:
+            return
+        self.config.hotkey_vks = list(vks)
+        self.config.hotkey_vk = vks[-1]  # keep the legacy single field in sync
+        label = combo_label(vks)
+        log.info("hotkey rebound to %s", label)
+        self.hotkey.set_vks(vks)
+        self.tray.set_hotkey_label(label)
+        # Persist immediately — rebinding should survive a restart (the old
+        # single-key path never saved, so a rebind silently reverted).
+        try:
+            self.config.save()
+        except Exception as e:  # noqa: BLE001
+            log.warning("could not save hotkey rebind: %s", e)
 
     # --------------------------------------------------------- quick toggles
     def _on_quick_toggle(self, field_name: str) -> None:

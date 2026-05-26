@@ -112,6 +112,79 @@ def _configure_logging() -> None:
 _configure_logging()
 
 
+# Keep the faulthandler sink alive for the whole process — if this is
+# GC'd, faulthandler ends up writing to a closed fd.
+_fault_log_handle = None
+
+
+def _install_crash_capture() -> None:
+    """Turn silent native deaths into a fingerprint.
+
+    Slumbr launches via ``pythonw.exe`` (no stderr) and leans on several
+    native threads — the PortAudio input/output callbacks and the
+    CUDA/CTranslate2 decoder. A fault in any of those (access violation,
+    use-after-free on an audio handle, the documented PySide6-vs-CUDA
+    exit-5) kills the interpreter with NO Python traceback, so the
+    rotating log just ends mid-line. We've seen exactly that. Two nets:
+
+      - ``faulthandler`` dumps every thread's C-level stack to a
+        dedicated file when a fatal signal fires — the only way to see
+        *where* a native crash happened under pythonw. It writes via the
+        raw fd at fault time, so Python-level buffering can't swallow it.
+      - ``sys.excepthook`` / ``threading.excepthook`` route any uncaught
+        *Python* exception (main or worker thread) into the logger, so
+        non-Qt threads (pynput, pystray) don't die quietly either.
+
+    All best-effort: failing to install crash capture must never stop
+    Slumbr from starting.
+    """
+    global _fault_log_handle
+    try:
+        import faulthandler  # noqa: PLC0415
+
+        appdata = os.environ.get("APPDATA")
+        log_dir = (
+            (Path(appdata) / "Slumbr" / "logs")
+            if appdata
+            else (Path.home() / ".slumbr" / "logs")
+        )
+        log_dir.mkdir(parents=True, exist_ok=True)
+        # Append so successive crashes accumulate.
+        _fault_log_handle = open(  # noqa: SIM115
+            log_dir / "slumbr-faults.log", "a", encoding="utf-8"
+        )
+        faulthandler.enable(file=_fault_log_handle, all_threads=True)
+    except Exception:  # noqa: BLE001
+        pass
+
+    crash_log = logging.getLogger("slumbr.crash")
+
+    def _excepthook(exc_type, exc_value, exc_tb):  # noqa: ANN001
+        crash_log.critical("uncaught exception", exc_info=(exc_type, exc_value, exc_tb))
+
+    try:
+        sys.excepthook = _excepthook
+    except Exception:  # noqa: BLE001
+        pass
+
+    try:
+        import threading  # noqa: PLC0415
+
+        def _thread_excepthook(args):  # noqa: ANN001
+            crash_log.critical(
+                "uncaught exception in thread %r",
+                getattr(args, "thread", None),
+                exc_info=(args.exc_type, args.exc_value, args.exc_traceback),
+            )
+
+        threading.excepthook = _thread_excepthook
+    except Exception:  # noqa: BLE001
+        pass
+
+
+_install_crash_capture()
+
+
 def _add_nvidia_dll_dirs() -> None:
     if sys.platform != "win32":
         return

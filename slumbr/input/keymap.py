@@ -157,6 +157,45 @@ def vk_label(vk: int) -> str:
     return _FALLBACK_VK_LABEL.get(vk, f"VK {vk:#04x}")
 
 
+# ---- modifier handling for multi-key combos -------------------------------
+# Generic modifier VKs (as the keymap/picker use them). The OS hook reports
+# the *specific* left/right variants (0xA0–0xA5, 0x5C); ``normalize_modifier``
+# folds those back to the generic code so combo matching is side-agnostic
+# ("either Ctrl" satisfies a Ctrl in the combo).
+MODIFIER_VKS: frozenset[int] = frozenset({0x10, 0x11, 0x12, 0x5B})  # Shift Ctrl Alt Win
+
+_MOD_NORMALIZE: dict[int, int] = {
+    0xA0: 0x10, 0xA1: 0x10,  # L/R Shift  → Shift
+    0xA2: 0x11, 0xA3: 0x11,  # L/R Ctrl   → Ctrl
+    0xA4: 0x12, 0xA5: 0x12,  # L/R Alt    → Alt
+    0x5C: 0x5B,              # R Win      → Win
+}
+
+
+def normalize_modifier(vk: int) -> int:
+    """Fold left/right modifier variants to their generic VK; pass others through."""
+    return _MOD_NORMALIZE.get(vk, vk)
+
+
+def is_modifier(vk: int) -> bool:
+    return normalize_modifier(vk) in MODIFIER_VKS
+
+
+# Canonical display order: modifiers first (Ctrl, Shift, Alt, Win), then the
+# trigger key — so a combo always reads "Ctrl + Shift + J".
+_COMBO_ORDER: list[int] = [0x11, 0x10, 0x12, 0x5B]
+
+
+def combo_label(vks: list[int]) -> str:
+    """Render a combo as e.g. "Ctrl + Shift + J". Single key → just its label."""
+    if not vks:
+        return "(unbound)"
+    norm = [normalize_modifier(v) for v in vks]
+    mods = [v for v in _COMBO_ORDER if v in norm]
+    others = [v for v in norm if v not in MODIFIER_VKS]
+    return " + ".join(vk_label(v) for v in (mods + others))
+
+
 # Modifier VKs that are bad choices for a *single-key* tap-to-toggle — we
 # disable them in the picker so the user can't accidentally bind Shift /
 # Ctrl / Alt / Win as their dictation key. They'd never be able to type
@@ -181,3 +220,68 @@ DISABLED_VKS: frozenset[int] = frozenset(
         0x20,  # Space — would break typing entirely
     }
 )
+
+# Keys that can't be part of a *combo* either. Much smaller than
+# ``DISABLED_VKS``: modifiers ARE allowed in combos now (that's the whole
+# point), and Space is fine (it only gets consumed when it completes the
+# held combo). We still bar Esc / Enter / Tab / Backspace — they're the
+# universal dialog/edit keys and binding them as a trigger is a footgun.
+COMBO_DISABLED_VKS: frozenset[int] = frozenset(
+    {
+        0x1B,  # Esc
+        0x0D,  # Enter
+        0x09,  # Tab
+        0x08,  # Backspace
+    }
+)
+
+# Max keys allowed in a single combo (3 modifiers + 1 trigger).
+MAX_COMBO_KEYS = 4
+
+
+# ---- reserved OS shortcuts ------------------------------------------------
+# Combos Windows owns. We refuse to bind these because either:
+#   (a) our hook would suppress the trigger key on completion and half-break
+#       the OS shortcut (e.g. Alt+F4 would stop closing windows), or
+#   (b) the combo is handled below the user-mode keyboard hook entirely
+#       (secure attention sequence, lock) so "binding" it would silently do
+#       nothing — a lie to the user.
+# Keyed by the normalized VK *set* → a friendly name the picker shows when it
+# blocks the bind. (Some entries — Ctrl+Shift+Esc — also can't even be built
+# in the picker because Esc is in COMBO_DISABLED_VKS; kept here as the
+# canonical example and a backstop.)
+RESERVED_COMBOS: dict[frozenset[int], str] = {
+    frozenset({0x11, 0x12, 0x2E}): "Security screen (Ctrl + Alt + Del)",
+    frozenset({0x11, 0x10, 0x1B}): "Task Manager (Ctrl + Shift + Esc)",
+    frozenset({0x5B, 0x4C}): "Lock screen (Win + L)",
+    frozenset({0x5B, 0x44}): "Show desktop (Win + D)",
+    frozenset({0x5B, 0x45}): "File Explorer (Win + E)",
+    frozenset({0x5B, 0x52}): "Run dialog (Win + R)",
+    frozenset({0x5B, 0x20}): "Switch keyboard layout (Win + Space)",
+    frozenset({0x12, 0x73}): "Close window (Alt + F4)",
+}
+
+
+def reserved_combo_name(vks: list[int]) -> str | None:
+    """If this exact combo is a reserved Windows shortcut, return its friendly
+    name (for the picker to explain the block); otherwise ``None``.
+    Side-agnostic — L/R modifier variants are normalized first.
+    """
+    key = frozenset(normalize_modifier(v) for v in vks if v)
+    return RESERVED_COMBOS.get(key)
+
+
+def reserved_combo_names() -> list[str]:
+    """Every reserved Windows combo's friendly name (e.g. "Lock screen
+    (Win + L)") — for the Shortcuts tab's "won't bind" disclaimer. Derived
+    from ``RESERVED_COMBOS`` so the list never drifts from what's enforced.
+    """
+    return list(RESERVED_COMBOS.values())
+
+
+def combo_disabled_key_labels() -> list[str]:
+    """Labels of the single keys that can never join a combo (Esc / Enter /
+    Tab / Backspace), in a stable reading order — for the same disclaimer.
+    """
+    order = [0x1B, 0x0D, 0x09, 0x08]  # Esc, Enter, Tab, Backspace
+    return [vk_label(v) for v in order if v in COMBO_DISABLED_VKS]

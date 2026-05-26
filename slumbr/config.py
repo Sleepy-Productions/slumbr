@@ -101,12 +101,32 @@ class SlumbrConfig:
     paste_method: str = "ctrl_v"   # "ctrl_v" | "ctrl_shift_v" | "type"
 
     # ----- Hotkey -----
-    # Stored as the raw Windows VK code. Default 0x14 = Caps Lock.
+    # ``hotkey_vks`` is the combo: a list of 1–4 Windows VK codes that must
+    # be held together to toggle dictation (e.g. [Ctrl, Shift, J]). A single
+    # element behaves like the classic single-key tap (default Caps Lock).
+    # ``hotkey_vk`` is kept as the legacy single-key field (= the combo's
+    # trigger) so older code / configs round-trip; ``hotkey_vks`` is the
+    # source of truth and ``from_dict`` migrates an old ``hotkey_vk`` into it.
     hotkey_vk: int = 0x14
+    hotkey_vks: list[int] = field(default_factory=lambda: [0x14])
 
     # ----- ASR hot-tunable knobs -----
     language: str = "en"
     initial_prompt: str = ""
+
+    # ----- Output cleanup -----
+    # ``word_replacements`` is a find-replace map applied to the final
+    # transcript before paste: {heard: corrected}. Whole-word, case-
+    # insensitive. Fixes consistent mishears the model makes on the user's
+    # jargon (e.g. "keybinde" -> "keybinds") and works on EVERY backend
+    # since it's pure post-processing (unlike ``initial_prompt``, which only
+    # biases Whisper). Empty by default — populated via Settings → Voice.
+    word_replacements: dict[str, str] = field(default_factory=dict)
+    # Strip Whisper's classic end-of-clip hallucinations ("Thank you.",
+    # "Thanks for watching.") that it invents on trailing silence. Only the
+    # curated phrase set in ``polish.py`` is removed, and only when real
+    # content precedes it — so a genuine short "thank you" is left alone.
+    strip_trailing_filler: bool = True
 
     # ----- Streaming engine experiment toggle -----
     streaming_visual_leading_edge: bool = False
@@ -165,6 +185,18 @@ class SlumbrConfig:
         known = {f.name for f in fields(cls)}
         kwargs: dict[str, Any] = {k: v for k, v in data.items() if k in known}
 
+        # ----- hotkey combo migration: old configs only have ``hotkey_vk``.
+        # Build ``hotkey_vks`` from it when absent so single-key binds survive
+        # the upgrade; keep the two in sync (trigger = last element).
+        raw_vks = data.get("hotkey_vks")
+        if isinstance(raw_vks, list) and raw_vks:
+            vks = [int(v) for v in raw_vks if isinstance(v, (int, float))]
+            kwargs["hotkey_vks"] = vks or [0x14]
+        elif "hotkey_vk" in data:
+            kwargs["hotkey_vks"] = [int(data["hotkey_vk"])]
+        if kwargs.get("hotkey_vks"):
+            kwargs["hotkey_vk"] = kwargs["hotkey_vks"][-1]
+
         # ----- backend field
         raw_backend = data.get("backend")
         if isinstance(raw_backend, dict):
@@ -187,6 +219,19 @@ class SlumbrConfig:
                 model=legacy_model,
                 compute_type=legacy_ct,
             )
+
+        # ----- output cleanup: coerce word_replacements to a clean {str:str}
+        raw_repl = data.get("word_replacements")
+        if isinstance(raw_repl, dict):
+            kwargs["word_replacements"] = {
+                str(k): str(v)
+                for k, v in raw_repl.items()
+                if str(k).strip() and isinstance(v, (str, int, float))
+            }
+        elif "word_replacements" in kwargs:
+            # Present but not a dict (corrupt/hand-edited) — drop it so the
+            # empty-map default is used instead of a bad type.
+            del kwargs["word_replacements"]
 
         return cls(**kwargs)
 
