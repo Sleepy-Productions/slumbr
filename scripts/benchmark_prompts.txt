@@ -14,3 +14,13 @@ The recording popup should open downward like a dropdown instead of climbing up.
 Switch the engine to large v3 turbo and run it on the GPU with int8 float16.
 On a CPU only machine we fall back to Moonshine or faster whisper for accuracy.
 Set my keybind to control shift J and make sure control C still works everywhere.
+How many gigabytes of VRAM does the RTX 5070 Ti actually have available?
+The quick brown fox jumps over the lazy dog near the riverbank at dawn.
+She sells seashells by the seashore on the seventh of September.
+Send the invoice to Jordan at finance dot example dot com before Friday at noon.
+Twelve thousand three hundred forty five dollars and sixty seven cents.
+# --- longer paragraph-style passages (test long-audio + the repetition fix) ---
+Okay so the main thing I want to do today is finish the transcoding work on YT Grab, because right now the download feels slow and when we tried to speed it up the CPU temperature shot way up, so we need to find a balance where it is fast but it does not cook the processor.
+Let's talk through the plan for the voice agent. First we get the microphone capture working reliably across different devices, then we wire up the streaming transcription so the partial text shows up instantly, and finally we make sure the final result that gets pasted is accurate even when the message is really long.
+I was thinking about the recommendation engine and how it should scale to every kind of hardware, whether somebody has a top tier NVIDIA card with sixteen gigabytes of memory, an AMD Radeon, an Intel Arc, or just a regular laptop with no dedicated graphics at all, it should still pick something that works and feels fast.
+When I tap the hotkey the popup should appear instantly, the audio bars should react to my voice, the live preview should stream the words as I speak them, and the moment I tap the key again it should paste the cleaned up transcript into whatever window I was in and optionally press enter to send it.
