@@ -22,9 +22,12 @@ if (-not $UseCurrentVenv) {
     python -m venv .venv-cpu
     $py = ".\.venv-cpu\Scripts\python.exe"
     & $py -m pip install --upgrade pip
-    # Install the package (base deps = faster-whisper + sherpa-onnx, both CPU)
-    # plus CPU onnxruntime explicitly so we never pull the DirectML build.
+    # Base deps (sherpa-onnx Moonshine + huggingface_hub + Qt). Then add
+    # faster-whisper for the cpu_ct2 backend WITHOUT the nvidia-* CUDA wheels
+    # (those live in the [cuda] extra) so the bundle stays CPU-sized, plus CPU
+    # onnxruntime so we never pull the DirectML build.
     & $py -m pip install .
+    & $py -m pip install "faster-whisper==1.2.1"
     & $py -m pip install onnxruntime    # CPU provider, not -directml
     & $py -m pip install pyinstaller
 } else {

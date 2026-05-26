@@ -15,8 +15,10 @@ datas: list = []
 binaries: list = []
 hiddenimports: list = []
 
-# Native-data packages PyInstaller's analysis misses (bundled .dll / .onnx).
-for _pkg in ("sherpa_onnx", "ctranslate2", "faster_whisper"):
+# Native-data packages PyInstaller's analysis misses (bundled .dll / .onnx),
+# plus huggingface_hub — it's imported lazily inside _ensure_moonshine (model
+# download), so static analysis never sees it and it gets left out otherwise.
+for _pkg in ("sherpa_onnx", "ctranslate2", "faster_whisper", "huggingface_hub", "tokenizers"):
     _d, _b, _h = collect_all(_pkg)
     datas += _d
     binaries += _b

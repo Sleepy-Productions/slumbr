@@ -43,12 +43,17 @@ First builds usually need a couple of iterations:
 - Test the built exe on a **clean machine / fresh user** (no Python, no
   `%APPDATA%\Slumbr`) to catch missing-dependency and first-run-download bugs.
 
-## Status: verified to boot
-The CPU onedir builds at ~176 MB and the packaged `Slumbr.exe` launches to
-the setup wizard with no Python and no GPU (tested with a throwaway
-`%APPDATA%`). Remaining before calling it shippable: run the full wizard →
-first-run model download → dictation once on a **clean machine**, then wrap
-with Inno Setup.
+## Status: runs end-to-end
+The CPU onedir builds at ~176 MB and the packaged `Slumbr.exe` runs the full
+flow with no Python and no GPU (tested with a throwaway `%APPDATA%`):
+"Preparing Slumbr" dialog → downloads Moonshine + Silero VAD (~280 MB to the
+profile) → "ready. Tap Caps Lock". Three bundling/dep bugs were fixed to get
+here (frozen entry point, missing `huggingface_hub`/`faster-whisper` deps,
+and the windowed-app None-stdout tqdm crash).
+
+Remaining before shipping: a real **clean-machine** run (fresh user, no
+`%APPDATA%\Slumbr`) to confirm first-run download + dictation, then wrap with
+Inno Setup, then the NVIDIA/AMD vendor flavors.
 
 ## Files
 - `slumbr_entry.py` — PyInstaller entry point. Imports `slumbr.__main__` as a
