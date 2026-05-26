@@ -115,6 +115,7 @@ class SlumbrApp:
             self.qapp.setWindowIcon(self._app_icon)
 
         # ----- First-launch wizard if backend isn't set yet.
+        self._show_settings_on_first_run = False
         if self.config.backend is None:
             log.info("first launch: showing setup wizard")
             wizard = SetupWizard(self.config, app_icon=self._app_icon)
@@ -122,6 +123,9 @@ class SlumbrApp:
             if result != QDialog.Accepted or self.config.backend is None:
                 log.info("setup wizard cancelled — exiting")
                 raise SystemExit(0)
+            # Wizard just completed → genuine first launch. Pop Settings once
+            # the app is up so a new user sees what they can tune.
+            self._show_settings_on_first_run = True
 
         log.info(
             "selected backend=%s model=%s",
@@ -705,4 +709,8 @@ class SlumbrApp:
         self.qapp.quit()
 
     def run(self) -> int:
+        if self._show_settings_on_first_run:
+            # First launch: open Settings shortly after boot so a new user sees
+            # what's tunable. 800 ms lets the tray + model-load settle first.
+            QTimer.singleShot(800, self._on_open_settings)
         return self.qapp.exec()

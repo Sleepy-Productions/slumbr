@@ -25,8 +25,8 @@ class AboutTab(QWidget):
         self._config = config
         body = QWidget()
         layout = QVBoxLayout(body)
-        layout.setContentsMargins(56, 52, 56, 52)
-        layout.setSpacing(14)
+        layout.setContentsMargins(48, 40, 48, 40)
+        layout.setSpacing(20)
 
         # ===== Header: logo + name + version + brand =====
         header = QHBoxLayout()
