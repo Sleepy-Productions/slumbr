@@ -53,11 +53,10 @@ from .input.mute_key import MuteKeyController
 from .input.paste import paste_text
 from .polish import polish
 from .state import State, StateMachine
-from .stt.factory import build_transcriber
 from .stt.protocol import Transcriber
-from .stt.streaming_engine import StreamingASREngine
 from .stt.worker import TranscribeWorker
 from .ui.popup import RecordingPopup
+from .ui.preparing import prepare_engines
 from .ui.settings_dialog import SettingsDialog
 from .ui.setup_wizard import SetupWizard
 from .ui.tray import SlumbrTray
@@ -107,20 +106,14 @@ class SlumbrApp:
             self.config.backend.model,
         )
 
-        # ----- Transcriber (primary STT engine).
-        self.transcriber: Transcriber = build_transcriber(
-            self.config.backend,
-            language=self.config.language or None,
-            initial_prompt=self.config.initial_prompt,
-        )
-        self.transcriber.warm_up()
-
-        # ----- Streaming engine for live popup partials. Always Moonshine
-        # on CPU; runs in parallel with whatever primary backend the user
-        # picked so popup partials work even on NVIDIA where Whisper isn't
-        # streaming-native.
-        self.streaming_engine = StreamingASREngine(
-            enable_streaming_leading_edge=self.config.streaming_visual_leading_edge,
+        # ----- Transcriber (primary STT) + streaming engine (live popup
+        # partials, always Moonshine on CPU). Built on a worker thread
+        # behind a "Preparing Slumbr" progress dialog so the first-run model
+        # download shows feedback instead of a silent multi-minute freeze,
+        # and a download failure surfaces a clear error (see preparing.py).
+        self.transcriber: Transcriber
+        self.transcriber, self.streaming_engine = prepare_engines(
+            self.config, self._app_icon
         )
 
         # ----- App state + popup + foreground tracker.
