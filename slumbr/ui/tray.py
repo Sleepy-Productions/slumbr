@@ -19,6 +19,7 @@ main thread.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 
 import pystray
@@ -33,6 +34,8 @@ from ..theme import (
     COLOR_RECORDING,
     COLOR_TRANSCRIBING,
 )
+
+log = logging.getLogger(__name__)
 
 _ICON_SIZE = 64
 
@@ -177,6 +180,19 @@ class SlumbrTray:
             return
         self._icon.icon = _icon_image(_STATE_COLORS[state])
         self._icon.title = self._title_for_state(state)
+
+    def notify(self, message: str, title: str = "Slumbr") -> None:
+        """Show a system-tray notification (Windows balloon). Best-effort:
+        no-op if the icon isn't up, and swallows backend errors — a failed
+        notification must never take down the caller. Thread-safe enough to
+        call from the Qt main thread; pystray marshals to its own loop.
+        """
+        if self._icon is None:
+            return
+        try:
+            self._icon.notify(message, title)
+        except Exception as e:  # noqa: BLE001
+            log.debug("tray notify failed: %s", e)
 
     def refresh_menu(self) -> None:
         """Force pystray to repaint the menu (e.g. after a fresh transcript

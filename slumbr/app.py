@@ -282,11 +282,21 @@ class SlumbrApp:
         if self.mic_mirror is not None:
             self.mic_mirror.set_muted(True)
         self.popup.show_recording()
+        # If the input stream never opened (device unplugged/renamed/in use),
+        # recording would silently capture nothing — tell the user instead.
+        if not self.recorder.has_stream():
+            log.error("no input stream — microphone unavailable")
+            self.tray.notify(
+                "Microphone unavailable — check your input device in Settings → Voice.",
+            )
+            self._reset_to_idle(error=True)
+            return
         try:
             self.recorder.start()
         except Exception as e:  # noqa: BLE001
             log.error("could not start recording: %s", e)
-            self._reset_to_idle()
+            self.tray.notify("Couldn't start recording — see logs.")
+            self._reset_to_idle(error=True)
             return
         self.streaming_engine.start_session()
         prebuffer_audio = self.recorder.snapshot()
@@ -378,9 +388,10 @@ class SlumbrApp:
 
     def _on_transcribe_failed(self, msg: str) -> None:
         log.error("transcribe failed: %s", msg)
-        self._reset_to_idle()
+        self.tray.notify("Couldn't transcribe that — see the log for details.")
+        self._reset_to_idle(error=True)
 
-    def _reset_to_idle(self, *, sent: bool = False) -> None:
+    def _reset_to_idle(self, *, sent: bool = False, error: bool = False) -> None:
         self.state.try_transition(State.IDLE, force=True)
         log.debug("-> IDLE")
         # Release the reverse-PTT mute key so the call app un-mutes
@@ -391,9 +402,12 @@ class SlumbrApp:
         # or already unmuted.
         if self.mic_mirror is not None:
             self.mic_mirror.set_muted(False)
-        # On a successful paste, flash "✓ Sent" (self-hides) so the user
-        # gets an unmistakable confirmation; otherwise just hide.
-        if sent:
+        # Outcome cue: green "✓ Sent" on a successful paste, red "✗ Failed"
+        # on an error (the tray notification carries the detail); otherwise
+        # just hide.
+        if error:
+            self.popup.flash_error()
+        elif sent:
             self.popup.flash_sent()
         else:
             self.popup.hide_popup()
@@ -506,6 +520,10 @@ class SlumbrApp:
             device,
         )
         self.mic_mirror = None
+        self.tray.notify(
+            "Virtual mic routing is on but no usable cable was found — "
+            "check Settings → Behavior.",
+        )
 
     def _open_mic_mirror_device(self, device: str) -> bool:
         """Try to open + start the mirror on ``device``. Returns success."""

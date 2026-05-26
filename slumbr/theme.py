@@ -32,3 +32,4 @@ COLOR_RECORDING = VIOLET_PRIMARY
 COLOR_TRANSCRIBING = VIOLET_DEEP
 COLOR_PASTING = VIOLET_DEEP
 COLOR_SENT = "#5FB87A"  # confident green — brief "✓ Sent" confirmation flash
+COLOR_ERROR = "#E0685F"  # red — brief "✗ Failed" flash when something goes wrong

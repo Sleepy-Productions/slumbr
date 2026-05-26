@@ -180,6 +180,12 @@ class AudioRecorder:
     def is_recording(self) -> bool:
         return self._saving
 
+    def has_stream(self) -> bool:
+        """True if the input stream is open. False means the device failed
+        to open (so a recording would capture nothing) — callers surface
+        this to the user instead of silently recording silence."""
+        return self._stream is not None
+
     def snapshot(self) -> np.ndarray | None:
         """Copy of the audio captured so far without stopping. For streaming."""
         with self._lock:
