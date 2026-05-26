@@ -116,9 +116,15 @@ def backend_options(profile: HardwareProfile) -> list[Option]:
         gpu_word = "Radeon" if gpu.vendor == GpuVendor.AMD else "Arc / Xe"
         return [
             Option("recommended", "directml", f"DirectML · DX12 — your {gpu_word} GPU."),
+            Option("balanced", "cpu_ct2", "Faster-Whisper · CPU — higher accuracy, slower."),
             Option("light", "moonshine", "Moonshine · CPU — no GPU load."),
         ]
-    return [Option("recommended", "moonshine", "Moonshine · CPU — snappy, fully local.")]
+    # CPU-only: Moonshine is the snappy seamless default; cpu_ct2 is the
+    # opt-in accuracy upgrade (real Whisper on CPU, no GPU required).
+    return [
+        Option("recommended", "moonshine", "Moonshine · CPU — snappy, fully local."),
+        Option("balanced", "cpu_ct2", "Faster-Whisper · CPU — real Whisper accuracy, slower."),
+    ]
 
 
 # CUDA Whisper model ladder, heaviest→lightest. ``large-v3-turbo`` is the
@@ -172,6 +178,15 @@ def model_options(backend_name: str, profile: HardwareProfile) -> list[Option]:
         return [
             Option("recommended", "small", "The sweet spot for this GPU's throughput."),
             Option("balanced", "medium", "More accurate, heavier."),
+        ]
+    if backend_name == "cpu_ct2":
+        # CPU Whisper: small is the accuracy/speed sweet spot on a modern
+        # CPU; medium is noticeably slower; base is the fast floor. No
+        # large/turbo — they're too slow to feel seamless without a GPU.
+        return [
+            Option("recommended", "small", "Good accuracy, usable speed on CPU."),
+            Option("balanced", "medium", "More accurate — noticeably slower on CPU."),
+            Option("light", "base", "Fastest CPU Whisper, lightest."),
         ]
     if backend_name == "moonshine":
         return [

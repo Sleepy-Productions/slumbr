@@ -46,6 +46,7 @@ log = logging.getLogger(__name__)
 # Friendly display names for backend values (shown on the backend cards).
 _BACKEND_LABELS: dict[str, str] = {
     "cuda_ct2": "Faster-Whisper (CUDA)",
+    "cpu_ct2": "Faster-Whisper (CPU)",
     "moonshine": "Moonshine (CPU)",
     "directml": "DirectML (AMD/Intel)",
     "whispercpp_sycl": "whisper.cpp SYCL",

@@ -22,21 +22,34 @@ log = logging.getLogger(__name__)
 
 
 class WhisperCT2Transcriber:
-    """Adapter exposing ``Transcriber`` over the existing WhisperEngine."""
+    """Adapter exposing ``Transcriber`` over the existing WhisperEngine.
+
+    Serves two backend names off the same engine:
+      - ``cuda_ct2`` → faster-whisper on the NVIDIA GPU (max perf).
+      - ``cpu_ct2``  → faster-whisper on the CPU (int8). This is the
+        *accuracy* path for no-GPU machines: real Whisper quality
+        (small/medium/base) where Moonshine base would otherwise be the
+        ceiling. Slower than Moonshine, so it's offered as an opt-in tier,
+        not the seamless default. Needs no extra dependency — faster-
+        whisper/CTranslate2 already ship and run on CPU.
+    """
 
     backend_name = "cuda_ct2"
 
     def __init__(self, cfg: BackendConfig, *, language: str | None, initial_prompt: str) -> None:
-        # faster-whisper accepts ``device="cuda"`` or ``"cpu"``; the
-        # CT2 path is intended for CUDA. CPU fallback exists but is
-        # slow — Moonshine is the better CPU pick. We let the user
-        # opt into ``device="cpu"`` via cfg.extra for diagnostic runs
-        # but don't recommend it in the wizard.
-        device = cfg.extra.get("device", "cuda") if cfg.extra else "cuda"
+        # Device: cpu_ct2 forces CPU; cuda_ct2 defaults to CUDA but honors
+        # an explicit cfg.extra["device"] override (diagnostic runs).
+        if cfg.name == "cpu_ct2":
+            device = "cpu"
+        else:
+            device = cfg.extra.get("device", "cuda") if cfg.extra else "cuda"
+        # float16 is a GPU format; CPU wants plain int8.
+        default_compute = "int8" if device == "cpu" else "int8_float16"
+        self.backend_name = cfg.name  # report the actual backend (cuda_ct2 / cpu_ct2)
         self._engine = WhisperEngine(
             model_size=cfg.model,
             device=device,
-            compute_type=cfg.compute_type or "int8_float16",
+            compute_type=cfg.compute_type or default_compute,
             language=language or None,
             initial_prompt=initial_prompt,
         )
