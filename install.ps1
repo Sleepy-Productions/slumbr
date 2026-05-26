@@ -41,6 +41,44 @@ function Write-Ok($msg)   { Write-Host "    $msg" -ForegroundColor Green }
 function Write-Warn2($msg){ Write-Host "    $msg" -ForegroundColor Yellow }
 function Fail($msg)       { Write-Host "ERROR: $msg" -ForegroundColor Red; exit 1 }
 
+function Reset-IconCache {
+    # Slumbr's icon is monochrome WHITE (slumbr/branding.py LOGO_COLOR = #FFFFFF),
+    # baked fresh into icon.ico just above. But Windows caches shell icons by path
+    # and can keep serving a STALE bitmap from an earlier build (this is why the
+    # desktop icon used to "randomly" come back tinted) — overwriting the .ico does
+    # NOT reliably invalidate that cache. So we force the shell to forget it.
+    # Every step is best-effort: a locked cache file or missing tool must never
+    # fail the install.
+    Write-Step "Refreshing Windows icon cache (so the white icon shows immediately)"
+    try {
+        # 1) Drop the per-user icon-cache databases — Explorer rebuilds them.
+        $patterns = @(
+            (Join-Path $env:LOCALAPPDATA 'IconCache.db'),
+            (Join-Path $env:LOCALAPPDATA 'Microsoft\Windows\Explorer\iconcache_*.db')
+        )
+        foreach ($p in $patterns) {
+            Get-ChildItem -Path $p -Force -ErrorAction SilentlyContinue | ForEach-Object {
+                try { Remove-Item $_.FullName -Force -ErrorAction Stop } catch {}
+            }
+        }
+        # 2) Ask the shell to rebuild its icon cache.
+        try { & ie4uinit.exe -show 2>$null } catch {}
+        # 3) Broadcast SHCNE_ASSOCCHANGED so already-open Explorer windows repaint
+        #    the icon now — WITHOUT a disruptive full Explorer restart (important
+        #    when someone else runs this installer).
+        if (-not ([System.Management.Automation.PSTypeName]'Slumbr.Shell').Type) {
+            Add-Type -Namespace 'Slumbr' -Name 'Shell' -MemberDefinition @'
+[System.Runtime.InteropServices.DllImport("shell32.dll")]
+public static extern void SHChangeNotify(int eventId, uint flags, System.IntPtr i1, System.IntPtr i2);
+'@
+        }
+        [Slumbr.Shell]::SHChangeNotify(0x08000000, 0x0000, [System.IntPtr]::Zero, [System.IntPtr]::Zero)
+        Write-Ok "icon cache refreshed (white icon active)"
+    } catch {
+        Write-Warn2 "icon-cache refresh skipped (non-fatal): $($_.Exception.Message)"
+    }
+}
+
 # ---------------------------------------------------------------- locate Python
 Write-Step "Locating Python 3.10–3.12"
 
@@ -128,6 +166,7 @@ if ($NoShortcut) {
     & $VENV_PY -m pip install --quiet pywin32 | Out-Host
     & $VENV_PY (Join-Path $ROOT 'scripts\install_shortcut.py') | Out-Host
     if ($LASTEXITCODE -ne 0) { Write-Warn2 "shortcut creation hit an error — re-run scripts\install_shortcut.py manually" }
+    Reset-IconCache
 }
 
 # ----------------------------------------------------------------- done

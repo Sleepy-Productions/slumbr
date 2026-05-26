@@ -2,10 +2,11 @@
 
 The vendored master art (assets/icon-master.png) is a glowing ring on an
 opaque near-black square. ``colorized_glyph`` turns it into a ring of a chosen
-accent color floating on transparency, cropped to fill — used both by the
-build-time icon bake (scripts/build_icon.py, static brand color) and at runtime
-to tint the logo / window icon to the user's accent so the symbol always
-matches the rest of the app.
+color floating on transparency, cropped to fill. Every caller (the build-time
+icon bake in scripts/build_icon.py, the runtime window icon, the About logo)
+passes the FIXED brand color ``LOGO_COLOR`` (white) — the brand mark is
+monochrome and does NOT follow the user's accent. (The function still takes a
+color arg so the bake can be re-themed in one place if the brand ever changes.)
 
 Pure PIL + numpy (no Qt) so the build script can import it without pulling in
 PySide6; the Qt wrappers live in ui/_widgets.py.

@@ -79,20 +79,21 @@ def section_card(title: str) -> tuple[QFrame, QVBoxLayout]:
     return card, v
 
 
-def glyph_pixmap(accent_hex: str, size: int = 256) -> QPixmap:
-    """The moon-v2 brand mark tinted to ``accent_hex`` as a transparent
-    QPixmap (see branding.colorized_glyph). Used for the About logo + window
-    icon so the symbol always matches the user's accent."""
+def glyph_pixmap(color_hex: str, size: int = 256) -> QPixmap:
+    """The moon-v2 brand mark rendered in ``color_hex`` as a transparent
+    QPixmap (see branding.colorized_glyph). For the About logo + window icon
+    callers pass the FIXED brand color (branding.LOGO_COLOR = white), NOT the
+    accent — the brand mark is monochrome by design."""
     from ...branding import colorized_glyph
 
-    im = colorized_glyph(accent_hex, size)
+    im = colorized_glyph(color_hex, size)
     data = im.tobytes("raw", "RGBA")
     qimg = QImage(data, im.width, im.height, QImage.Format.Format_RGBA8888).copy()
     return QPixmap.fromImage(qimg)
 
 
-def glyph_icon(accent_hex: str, size: int = 256) -> QIcon:
-    return QIcon(glyph_pixmap(accent_hex, size))
+def glyph_icon(color_hex: str, size: int = 256) -> QIcon:
+    return QIcon(glyph_pixmap(color_hex, size))
 
 
 def keycap(text: str) -> QLabel:

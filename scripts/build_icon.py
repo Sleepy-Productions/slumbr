@@ -1,11 +1,15 @@
 """Bake slumbr/assets/icon.ico + icon.png from the moon-v2 master.
 
-This is the STATIC shell icon — Explorer, the pinned taskbar entry, and the
-frozen exe's embedded icon — tinted to the brand violet. At RUNTIME the app
-re-tints the same master to the user's chosen accent for the window/taskbar
-icon and the About logo (see slumbr/branding.py + ui/_widgets.glyph_icon), so
-the live symbol always matches the accent; this baked file is just the
-pre-launch fallback.
+This is the STATIC shell icon — Explorer, the desktop shortcut, the pinned
+taskbar entry. It is baked in the FIXED brand color (branding.LOGO_COLOR =
+white), monochrome. At RUNTIME the app renders the same master in that SAME
+fixed brand color for the window/taskbar icon and the About logo (see
+slumbr/branding.py + ui/tabs/_widgets.glyph_icon) — the brand mark does NOT
+follow the user's accent. The accent is "your color" for the chrome only
+(tray dot, visualizer); a tinted/pink icon is a bug.
+
+NOTE: overwriting icon.ico does not always evict Windows' shell icon cache —
+install.ps1's Reset-IconCache handles that so a stale icon can't linger.
 
 Run when the master art or brand color changes:
     .\\.venv\\Scripts\\python.exe scripts\\build_icon.py
