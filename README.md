@@ -31,11 +31,25 @@ Grab the installer from the **[latest release](https://github.com/SIeepyDev/slum
 
 ## How it works
 
-<p align="center"><img src="screenshots/step1-dictate.png" alt="Tap your hotkey and talk — a live waveform and transcript appear, and the words type into the focused window" width="780"></p>
+**1 · Tap, speak — done.** Tap your hotkey and a compact popup appears with a live audio meter and a transcript that grows as you talk. Tap again and your words land at the cursor.
 
-<p align="center"><img src="screenshots/step2-customize.png" alt="One accent color recolors the whole app and persists; tune the popup and hotkey" width="780"></p>
+![Slumbr's recording popup — a live audio meter and the transcript growing as you speak](screenshots/step1-dictate.png)
 
-Under the hood, Slumbr runs **two ASR engines** in parallel because Whisper isn't streaming-native:
+**2 · It picks the right engine for your machine.** On first launch Slumbr probes your hardware and recommends the fastest path — here an RTX 5070 Ti gets Faster-Whisper on CUDA. Backend, model, and precision are three independent picks, so you can mix a high model with a lighter backend.
+
+![Engine settings — Slumbr auto-detects the GPU and CPU and recommends Faster-Whisper on CUDA, with Recommended / Balanced / Light picks for backend, model, and precision](screenshots/step2-engine.png)
+
+**3 · Make it yours.** One accent color recolors the whole app — visualizer, settings UI, tray icon — live, and persists across restarts. Tune the popup style too.
+
+![Customization tab — pick any accent color and choose the recording-popup style](screenshots/step3-customize.png)
+
+**4 · Everything stays local.** Your last 30 transcripts live on disk and never leave it. Clear them anytime.
+
+![History tab — the last 30 transcripts with timestamps, stored locally and never sent anywhere](screenshots/step4-history.png)
+
+### Two engines under the hood
+
+Slumbr runs **two ASR engines** in parallel because Whisper isn't streaming-native:
 
 | Engine | Job | Latency |
 | --- | --- | --- |

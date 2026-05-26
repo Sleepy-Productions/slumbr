@@ -32,7 +32,8 @@ SetupIconFile=..\slumbr\assets\icon.ico
 WizardStyle=modern
 
 [Tasks]
-Name: "startupicon"; Description: "Start Slumbr automatically when I log in"; Flags: unchecked
+Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Additional shortcuts:"
+Name: "startupicon"; Description: "Start Slumbr automatically when I log in"; GroupDescription: "Additional shortcuts:"; Flags: unchecked
 
 [Files]
 ; The entire PyInstaller onedir.
@@ -41,6 +42,7 @@ Source: "..\dist\Slumbr\*"; DestDir: "{app}"; Flags: recursesubdirs createallsub
 [Icons]
 Name: "{group}\Slumbr"; Filename: "{app}\Slumbr.exe"
 Name: "{group}\Uninstall Slumbr"; Filename: "{uninstallexe}"
+Name: "{autodesktop}\Slumbr"; Filename: "{app}\Slumbr.exe"; Tasks: desktopicon
 Name: "{userstartup}\Slumbr"; Filename: "{app}\Slumbr.exe"; Tasks: startupicon
 
 [Run]
