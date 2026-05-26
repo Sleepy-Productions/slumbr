@@ -139,6 +139,12 @@ class AdvancedTab(QWidget):
         self._keep_clip_cb.setChecked(config.keep_transcript_on_clipboard)
         self._keep_clip_cb.toggled.connect(self._on_changed)
         sl.addWidget(self._keep_clip_cb)
+        sl.addWidget(
+            field_hint(
+                "Heads up: each new dictation overwrites your clipboard with the "
+                "latest transcript."
+            )
+        )
         layout.addWidget(_card)
 
         # ===== Vocabulary =====
