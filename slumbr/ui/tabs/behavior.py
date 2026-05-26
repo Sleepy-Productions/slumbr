@@ -18,9 +18,10 @@ backlog item.
 from __future__ import annotations
 
 from PySide6.QtCore import QEvent, Qt, QThread, Signal
-from PySide6.QtGui import QFont, QKeyEvent
+from PySide6.QtGui import QColor, QFont, QKeyEvent
 from PySide6.QtWidgets import (
     QCheckBox,
+    QColorDialog,
     QComboBox,
     QDialog,
     QFrame,
@@ -122,6 +123,28 @@ class BehaviorTab(QWidget):
                 "events can leak as garbage text into your transcript."
             )
         )
+        layout.addWidget(_card)
+
+        # ===== Section: Appearance =====
+        _card, sl = self._section("Appearance")
+        sl.addWidget(
+            field_hint(
+                "Accent color — recolors the audio visualizer and the "
+                "“✓ Sent” confirmation flash. (Full UI accent is coming next.)"
+            )
+        )
+        arow = QHBoxLayout()
+        arow.setSpacing(10)
+        arow.setContentsMargins(0, 4, 0, 0)
+        self._color_swatch = QLabel()
+        self._color_swatch.setFixedSize(30, 30)
+        self._refresh_swatch()
+        pick = QPushButton("Pick color…")
+        pick.clicked.connect(self._on_pick_color)
+        arow.addWidget(self._color_swatch)
+        arow.addWidget(pick)
+        arow.addStretch(1)
+        sl.addLayout(arow)
         layout.addWidget(_card)
 
         # ===== Section: Reverse PTT =====
@@ -289,6 +312,21 @@ class BehaviorTab(QWidget):
         """Open the install dialog and kick off the VB-Cable installer."""
         dlg = _VBCableInstallDialog(self)
         dlg.exec()
+
+    def _refresh_swatch(self) -> None:
+        self._color_swatch.setStyleSheet(
+            f"background: {self._config.accent_color}; border: 1px solid {BORDER}; "
+            "border-radius: 6px;"
+        )
+
+    def _on_pick_color(self) -> None:
+        chosen = QColorDialog.getColor(
+            QColor(self._config.accent_color), self, "Pick accent color"
+        )
+        if chosen.isValid():
+            self._config.accent_color = chosen.name()
+            self._refresh_swatch()
+            self.config_changed.emit()
 
 
 class _CaptureKeyButton(QPushButton):

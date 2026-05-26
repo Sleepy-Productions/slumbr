@@ -46,8 +46,6 @@ from ..theme import (
     BORDER,
     COLOR_ERROR,
     COLOR_IDLE,
-    COLOR_RECORDING,
-    COLOR_SENT,
     COLOR_TRANSCRIBING,
     TEXT_SECONDARY,
     VIOLET_PRIMARY,
@@ -188,10 +186,14 @@ class _Visualizer(QWidget):
         self._targets = np.zeros(self.BAR_COUNT, dtype=np.float32)
         self._active = False
         self._t0 = 0.0  # monotonic time when ripple started
+        self._color = VIOLET_PRIMARY  # accent — overridden via set_color()
 
         self._timer = QTimer(self)
         self._timer.setInterval(16)
         self._timer.timeout.connect(self._tick)
+
+    def set_color(self, color: str) -> None:
+        self._color = color
 
     def push_samples(self, samples: np.ndarray) -> None:
         """Called on the Qt main thread (queued from audio thread)."""
@@ -262,7 +264,7 @@ class _Visualizer(QWidget):
             level = float(self._levels[i])
             bar_h = max(2, int(level * 2 * max_half))
             y = cy - bar_h // 2
-            color = QColor(VIOLET_PRIMARY)
+            color = QColor(self._color)
             color.setAlpha(int(170 + 80 * level))
             p.setPen(Qt.NoPen)
             p.setBrush(color)
@@ -415,6 +417,9 @@ class _PartialTextRenderer(QWidget):
     def has_text(self) -> bool:
         return bool(self._chars)
 
+    def set_color(self, color: str) -> None:
+        self._color = QColor(color)
+
     # ----------------------------------------------------------------- tick
     def _tick(self) -> None:
         if self._appear_at.size == 0:
@@ -508,6 +513,12 @@ class RecordingPopup(QWidget):
         #   - whether ``set_partial`` does anything
         #   - target size used by the collapse / expand animation
         self._compact = False
+
+        # Accent color (user-customizable). Drives the recording dot, the
+        # visualizer bars, the live partial text, and the "✓ Sent" flash, so
+        # the popup matches the user's chosen color. Set via ``set_accent``
+        # from app.py at startup + on config change. Errors stay red.
+        self._accent = VIOLET_PRIMARY
 
         # Cursor-follow: while the popup is visible (RECORDING /
         # TRANSCRIBING) it tracks the user's mouse at ~60 Hz so it
@@ -614,11 +625,18 @@ class RecordingPopup(QWidget):
         self.move(QPoint(x, y))
 
     # ------------------------------------------------------------------ API
+    def set_accent(self, color: str) -> None:
+        """Apply the user's accent color to the popup (dot, bars, partial
+        text, sent flash). Live — takes effect on the next show/paint."""
+        self._accent = color
+        self._visualizer.set_color(color)
+        self._partial.set_color(color)
+
     def show_recording(self) -> None:
         # Cancel any in-flight outcome flash from the previous utterance.
         self._flash_timer.stop()
         self._flash_color = None
-        self._dot.set_color(COLOR_RECORDING)
+        self._dot.set_color(self._accent)
         self._elapsed_label.setText("0:00")
         self._visualizer.start()
         # Start compact — the streaming worker will expand us once it has
@@ -675,8 +693,9 @@ class RecordingPopup(QWidget):
         self._elapsed_label.setText(f"{m}:{s:02d}")
 
     def flash_sent(self) -> None:
-        """Confirm a successful paste with a brief green "✓ Sent"."""
-        self._flash(COLOR_SENT, "✓ Sent", 700)
+        """Confirm a successful paste with a brief "✓ Sent" in the user's
+        accent color (so the send highlight matches the visualizer + UI)."""
+        self._flash(self._accent, "✓ Sent", 700)
 
     def flash_error(self) -> None:
         """Signal a failure with a brief red "✗ Failed". Held a touch longer
