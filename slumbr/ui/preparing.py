@@ -67,7 +67,9 @@ class _EngineWorker(QObject):
 
 
 class _PreparingDialog(QDialog):
-    def __init__(self, model: str, app_icon: QIcon | None = None) -> None:
+    def __init__(
+        self, model: str, app_icon: QIcon | None = None, accent: str = VIOLET_PRIMARY
+    ) -> None:
         super().__init__()
         self.setWindowTitle("Slumbr")
         self.setWindowFlag(Qt.WindowContextHelpButtonHint, False)
@@ -81,7 +83,7 @@ class _PreparingDialog(QDialog):
             f"QLabel {{ color: {TEXT_PRIMARY}; }}"
             f"QProgressBar {{ background: {BG_DARK}; border: 1px solid {BORDER}; "
             f"border-radius: 6px; height: 8px; }}"
-            f"QProgressBar::chunk {{ background: {VIOLET_PRIMARY}; border-radius: 6px; }}"
+            f"QProgressBar::chunk {{ background: {accent}; border-radius: 6px; }}"
         )
 
         lay = QVBoxLayout(self)
@@ -142,7 +144,7 @@ def prepare_engines(
     thread.started.connect(worker.run)
 
     model = config.backend.model if config.backend else "speech"
-    dialog = _PreparingDialog(model, app_icon)
+    dialog = _PreparingDialog(model, app_icon, config.accent_color)
 
     thread.start()
     # Only show the dialog if prep hasn't already finished — keeps cached

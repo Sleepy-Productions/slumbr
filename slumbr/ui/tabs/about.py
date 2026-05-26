@@ -26,12 +26,12 @@ class AboutTab(QWidget):
 
         layout.addWidget(heading("About Slumbr", size=32))
 
-        brand = QLabel("Sleepy Productions")
-        brand.setStyleSheet(f"color: {VIOLET_PRIMARY}; font-weight: 700;")
+        self._brand = QLabel("Sleepy Productions")
+        self._brand.setStyleSheet(f"color: {VIOLET_PRIMARY}; font-weight: 700;")
         bf = QFont()
         bf.setPointSize(17)
-        brand.setFont(bf)
-        layout.addWidget(brand)
+        self._brand.setFont(bf)
+        layout.addWidget(self._brand)
 
         version = QLabel(f"Version {__version__}")
         vf = QFont()
@@ -52,16 +52,16 @@ class AboutTab(QWidget):
         tagline.setStyleSheet(f"color: {TEXT_PRIMARY}; padding-top: 8px;")
         layout.addWidget(tagline)
 
-        link = QLabel(
+        self._link = QLabel(
             f'<a href="{_REPO_URL}" style="color: {VIOLET_PRIMARY};">{_REPO_URL}</a>'
         )
         lf = QFont()
         lf.setPointSize(11)
-        link.setFont(lf)
-        link.setOpenExternalLinks(True)
-        link.setTextInteractionFlags(Qt.TextBrowserInteraction)
-        link.setStyleSheet("padding-top: 4px;")
-        layout.addWidget(link)
+        self._link.setFont(lf)
+        self._link.setOpenExternalLinks(True)
+        self._link.setTextInteractionFlags(Qt.TextBrowserInteraction)
+        self._link.setStyleSheet("padding-top: 4px;")
+        layout.addWidget(self._link)
 
         license_label = QLabel("Released under the MIT License.")
         license_label.setStyleSheet(f"color: {TEXT_SECONDARY};")
@@ -103,3 +103,10 @@ class AboutTab(QWidget):
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.addWidget(scrollable(body))
+
+    def reflect_accent(self, primary: str) -> None:
+        """Recolor the brand text + repo link to the user's accent."""
+        self._brand.setStyleSheet(f"color: {primary}; font-weight: 700;")
+        self._link.setText(
+            f'<a href="{_REPO_URL}" style="color: {primary};">{_REPO_URL}</a>'
+        )

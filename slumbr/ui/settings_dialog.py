@@ -264,6 +264,8 @@ class SettingsDialog(QDialog):
         self.setStyleSheet(_dialog_qss(primary, hover, deep, pill_bg))
         self._engine_tab.reflect_accent(primary)
         self._shortcuts_tab.reflect_accent(primary, deep)
+        self._behavior_tab.reflect_accent(primary)
+        self._about_tab.reflect_accent(primary)
 
     def _handle_hotkey_changed(self, vks: list[int]) -> None:
         # The app callback owns persistence + the live rebind + tray label
