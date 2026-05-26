@@ -18,13 +18,10 @@ backlog item.
 from __future__ import annotations
 
 from PySide6.QtCore import QEvent, Qt, QThread, Signal
-from PySide6.QtGui import QColor, QFont, QKeyEvent
+from PySide6.QtGui import QKeyEvent
 from PySide6.QtWidgets import (
     QCheckBox,
-    QColorDialog,
-    QComboBox,
     QDialog,
-    QFrame,
     QHBoxLayout,
     QLabel,
     QPlainTextEdit,
@@ -43,7 +40,15 @@ from ...theme import (
     TEXT_PRIMARY,
     TEXT_SECONDARY,
 )
-from ._widgets import field_hint, field_label, heading, scrollable, subheading
+from ._widgets import (
+    NoScrollComboBox,
+    field_hint,
+    field_label,
+    heading,
+    scrollable,
+    section_card,
+    subheading,
+)
 
 
 class BehaviorTab(QWidget):
@@ -68,9 +73,9 @@ class BehaviorTab(QWidget):
         )
 
         # ===== Section: Pasting =====
-        _card, sl = self._section("Pasting")
+        _card, sl = section_card("Pasting")
         sl.addWidget(field_label("Paste method"))
-        self._paste_combo = QComboBox()
+        self._paste_combo = NoScrollComboBox()
         self._paste_combo.addItem(
             "Ctrl+V — chats, browsers, editors (fastest)", userData="ctrl_v"
         )
@@ -102,53 +107,8 @@ class BehaviorTab(QWidget):
         sl.addWidget(self._preserve_cb)
         layout.addWidget(_card)
 
-        # ===== Section: Recording popup =====
-        _card, sl = self._section("Recording popup")
-        self._compact_popup_cb = QCheckBox(
-            "Compact recording popup (audio bars only — no word preview)"
-        )
-        self._compact_popup_cb.setChecked(config.compact_popup)
-        self._compact_popup_cb.toggled.connect(self._on_compact_popup_toggle)
-        sl.addWidget(self._compact_popup_cb)
-
-        self._follow_cursor_cb = QCheckBox(
-            "Popup follows the mouse cursor while recording"
-        )
-        self._follow_cursor_cb.setChecked(config.popup_follow_cursor)
-        self._follow_cursor_cb.toggled.connect(self._on_follow_cursor_toggle)
-        sl.addWidget(self._follow_cursor_cb)
-        sl.addWidget(
-            field_hint(
-                "Off by default — if you dictate into a terminal, mouse motion "
-                "events can leak as garbage text into your transcript."
-            )
-        )
-        layout.addWidget(_card)
-
-        # ===== Section: Appearance =====
-        _card, sl = self._section("Appearance")
-        sl.addWidget(
-            field_hint(
-                "Accent color — recolors the audio visualizer and the "
-                "“✓ Sent” confirmation flash. (Full UI accent is coming next.)"
-            )
-        )
-        arow = QHBoxLayout()
-        arow.setSpacing(10)
-        arow.setContentsMargins(0, 4, 0, 0)
-        self._color_swatch = QLabel()
-        self._color_swatch.setFixedSize(30, 30)
-        self._refresh_swatch()
-        pick = QPushButton("Pick color…")
-        pick.clicked.connect(self._on_pick_color)
-        arow.addWidget(self._color_swatch)
-        arow.addWidget(pick)
-        arow.addStretch(1)
-        sl.addLayout(arow)
-        layout.addWidget(_card)
-
         # ===== Section: Reverse PTT =====
-        _card, sl = self._section("Reverse PTT — mute external apps while dictating")
+        _card, sl = section_card("Reverse PTT — mute external apps while dictating")
         sl.addWidget(
             field_hint(
                 "Slumbr presses a chosen key during dictation so apps like Discord "
@@ -175,7 +135,7 @@ class BehaviorTab(QWidget):
         layout.addWidget(_card)
 
         # ===== Section: Virtual mic routing =====
-        _card, sl = self._section("Virtual mic routing — universal")
+        _card, sl = section_card("Virtual mic routing — universal")
         sl.addWidget(
             field_hint(
                 "Pass your mic through a virtual cable (e.g. VB-Audio Virtual Cable) "
@@ -225,7 +185,7 @@ class BehaviorTab(QWidget):
         cable_row.setSpacing(10)
         cable_row.setContentsMargins(0, 4, 0, 0)
         cable_row.addWidget(field_label("Virtual cable:"))
-        self._cable_combo = QComboBox()
+        self._cable_combo = NoScrollComboBox()
         self._cable_combo.addItem("(none)", userData="")
         for _idx, name in self._cables:
             self._cable_combo.addItem(name, userData=name)
@@ -254,27 +214,6 @@ class BehaviorTab(QWidget):
         outer.setContentsMargins(0, 0, 0, 0)
         outer.addWidget(scrollable(body))
 
-    def _section(self, title: str) -> tuple[QFrame, QVBoxLayout]:
-        """A titled card that groups related settings — gives the tab clear
-        visual structure instead of one flat wall of checkboxes."""
-        card = QFrame()
-        card.setObjectName("sectionCard")
-        card.setStyleSheet(
-            f"QFrame#sectionCard {{ background: {BG_PANEL}; border: 1px solid {BORDER}; "
-            f"border-radius: 12px; }}"
-        )
-        v = QVBoxLayout(card)
-        v.setContentsMargins(20, 14, 20, 16)
-        v.setSpacing(10)
-        hdr = QLabel(title)
-        hf = QFont()
-        hf.setPointSize(12)
-        hf.setBold(True)
-        hdr.setFont(hf)
-        hdr.setStyleSheet(f"color: {TEXT_PRIMARY};")
-        v.addWidget(hdr)
-        return card, v
-
     def _on_changed(self, *_args) -> None:
         method = self._paste_combo.currentData()
         if method:
@@ -301,33 +240,10 @@ class BehaviorTab(QWidget):
         self._config.mic_routing_device_name = device
         self.config_changed.emit()
 
-    def _on_compact_popup_toggle(self, checked: bool) -> None:
-        self._config.compact_popup = checked
-        self.config_changed.emit()
-
-    def _on_follow_cursor_toggle(self, checked: bool) -> None:
-        self._config.popup_follow_cursor = checked
-        self.config_changed.emit()
-
     def _on_install_vbcable(self) -> None:
         """Open the install dialog and kick off the VB-Cable installer."""
         dlg = _VBCableInstallDialog(self)
         dlg.exec()
-
-    def _refresh_swatch(self) -> None:
-        self._color_swatch.setStyleSheet(
-            f"background: {self._config.accent_color}; border: 1px solid {BORDER}; "
-            "border-radius: 6px;"
-        )
-
-    def _on_pick_color(self) -> None:
-        chosen = QColorDialog.getColor(
-            QColor(self._config.accent_color), self, "Pick accent color"
-        )
-        if chosen.isValid():
-            self._config.accent_color = chosen.name()
-            self._refresh_swatch()
-            self.config_changed.emit()
 
     def reflect_accent(self, primary: str) -> None:
         """Recolor the virtual-cable status dot to the accent (when shown)."""

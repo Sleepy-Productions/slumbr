@@ -10,14 +10,20 @@ import sounddevice as sd
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
     QCheckBox,
-    QComboBox,
     QPlainTextEdit,
     QVBoxLayout,
     QWidget,
 )
 
 from ...config import SlumbrConfig
-from ._widgets import field_hint, field_label, heading, scrollable, subheading
+from ._widgets import (
+    NoScrollComboBox,
+    field_hint,
+    field_label,
+    heading,
+    scrollable,
+    subheading,
+)
 
 
 def _list_input_devices() -> list[tuple[int, str]]:
@@ -77,7 +83,7 @@ class VoiceTab(QWidget):
 
         # Input device
         layout.addWidget(field_label("Input device"))
-        self._device_combo = QComboBox()
+        self._device_combo = NoScrollComboBox()
         self._device_combo.addItem("System default", userData=None)
         for _idx, name in _list_input_devices():
             self._device_combo.addItem(name, userData=name)
@@ -90,7 +96,7 @@ class VoiceTab(QWidget):
 
         # Language
         layout.addWidget(field_label("Language"))
-        self._language_combo = QComboBox()
+        self._language_combo = NoScrollComboBox()
         self._language_combo.addItem("English (recommended)", userData="en")
         self._language_combo.addItem("Auto-detect", userData="")
         self._language_combo.addItem("Spanish", userData="es")
