@@ -216,7 +216,7 @@ class SettingsDialog(QDialog):
         self._customization_tab = CustomizationTab(config)
         self._shortcuts_tab = ShortcutsTab(config)
         self._history_tab = HistoryTab()
-        self._about_tab = AboutTab()
+        self._about_tab = AboutTab(config)
 
         self._tabs.addTab(self._engine_tab, "Engine")
         self._tabs.addTab(self._voice_tab, "Voice")

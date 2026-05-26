@@ -8,7 +8,7 @@ its own page logic.
 from __future__ import annotations
 
 from PySide6.QtCore import QPoint, QRect, QSize, Qt
-from PySide6.QtGui import QFont
+from PySide6.QtGui import QFont, QIcon, QImage, QPixmap
 from PySide6.QtWidgets import (
     QComboBox,
     QFrame,
@@ -74,6 +74,22 @@ def section_card(title: str) -> tuple[QFrame, QVBoxLayout]:
     hdr.setStyleSheet(f"color: {TEXT_PRIMARY};")
     v.addWidget(hdr)
     return card, v
+
+
+def glyph_pixmap(accent_hex: str, size: int = 256) -> QPixmap:
+    """The moon-v2 brand mark tinted to ``accent_hex`` as a transparent
+    QPixmap (see branding.colorized_glyph). Used for the About logo + window
+    icon so the symbol always matches the user's accent."""
+    from ...branding import colorized_glyph
+
+    im = colorized_glyph(accent_hex, size)
+    data = im.tobytes("raw", "RGBA")
+    qimg = QImage(data, im.width, im.height, QImage.Format.Format_RGBA8888).copy()
+    return QPixmap.fromImage(qimg)
+
+
+def glyph_icon(accent_hex: str, size: int = 256) -> QIcon:
+    return QIcon(glyph_pixmap(accent_hex, size))
 
 
 def keycap(text: str) -> QLabel:

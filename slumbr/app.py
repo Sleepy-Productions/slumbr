@@ -80,16 +80,30 @@ class _Bridge(QObject):
 
 class SlumbrApp:
     def __init__(self) -> None:
+        # ----- Taskbar/alt-tab identity. Must run before QApplication, else
+        # Windows groups the app (when run via pythonw) under the generic
+        # Python icon instead of Slumbr's. No-op off Windows / on failure.
+        if sys.platform == "win32":
+            try:
+                import ctypes
+                ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("sleepydev.slumbr.v1")
+            except Exception:
+                pass
+
         # ----- QApplication first, so the wizard can use Qt widgets.
         self.qapp = QApplication(sys.argv)
         self.qapp.setQuitOnLastWindowClosed(False)
-        self._app_icon: QIcon | None = None
-        if _ICON_PATH.is_file():
-            self._app_icon = QIcon(str(_ICON_PATH))
-            self.qapp.setWindowIcon(self._app_icon)
 
-        # ----- Config (with legacy → BackendConfig migration).
+        # ----- Config (with legacy → BackendConfig migration). Loaded before
+        # the window icon so the icon can be tinted to the user's accent.
         self.config = SlumbrConfig.load()
+
+        # ----- Taskbar / window icon = the moon-v2 brand mark tinted to the
+        # user's accent, so the symbol matches the rest of the app. Falls back
+        # to the static brand .ico if the tint fails.
+        self._app_icon: QIcon | None = self._build_app_icon()
+        if self._app_icon is not None:
+            self.qapp.setWindowIcon(self._app_icon)
 
         # ----- First-launch wizard if backend isn't set yet.
         if self.config.backend is None:
@@ -431,6 +445,17 @@ class SlumbrApp:
         dlg.raise_()
         dlg.activateWindow()
 
+    def _build_app_icon(self) -> QIcon | None:
+        """Window/taskbar icon: the moon-v2 brand mark tinted to the user's
+        accent. Falls back to the static brand .ico, then None."""
+        try:
+            from .ui.tabs._widgets import glyph_icon
+
+            return glyph_icon(self.config.accent_color, 256)
+        except Exception:  # noqa: BLE001
+            log.exception("accent app-icon failed; using static .ico")
+            return QIcon(str(_ICON_PATH)) if _ICON_PATH.is_file() else None
+
     def _on_config_changed(self) -> None:
         """Settings tabs call this whenever the user changes anything.
         Persist + apply the hot-tunable knobs (language, initial prompt,
@@ -464,6 +489,10 @@ class SlumbrApp:
         self.popup.set_follow_cursor(self.config.popup_follow_cursor)
         self.popup.set_accent(self.config.accent_color)
         self.tray.set_accent(self.config.accent_color)
+        # Window/taskbar icon tracks the accent too.
+        self._app_icon = self._build_app_icon()
+        if self._app_icon is not None:
+            self.qapp.setWindowIcon(self._app_icon)
         # Refresh the tray menu so quick-toggle checkmarks reflect new state.
         self.tray.refresh_menu()
 

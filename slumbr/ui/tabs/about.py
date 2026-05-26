@@ -2,26 +2,26 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QFont, QPixmap
+from PySide6.QtGui import QFont
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
 from ... import __version__
+from ...config import SlumbrConfig
 from ...theme import TEXT_PRIMARY, TEXT_SECONDARY, VIOLET_PRIMARY
-from ._widgets import heading, scrollable, tag
+from ._widgets import glyph_pixmap, heading, scrollable, tag
 
 _REPO_URL = "https://github.com/SIeepyDev/slumbr"
-_LOGO_PATH = Path(__file__).resolve().parents[2] / "assets" / "icon.png"
+_LOGO_PX = 88
 
 
 class AboutTab(QWidget):
     quit_requested = Signal()
     restart_requested = Signal()
 
-    def __init__(self) -> None:
+    def __init__(self, config: SlumbrConfig) -> None:
         super().__init__()
+        self._config = config
         body = QWidget()
         layout = QVBoxLayout(body)
         layout.setContentsMargins(56, 52, 56, 52)
@@ -31,14 +31,10 @@ class AboutTab(QWidget):
         header = QHBoxLayout()
         header.setSpacing(20)
 
-        pix = QPixmap(str(_LOGO_PATH))
-        if not pix.isNull():
-            logo = QLabel()
-            logo.setPixmap(
-                pix.scaled(88, 88, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-            )
-            logo.setFixedSize(88, 88)
-            header.addWidget(logo, 0, Qt.AlignTop)
+        self._logo = QLabel()
+        self._logo.setFixedSize(_LOGO_PX, _LOGO_PX)
+        self._set_logo(config.accent_color)
+        header.addWidget(self._logo, 0, Qt.AlignTop)
 
         namecol = QVBoxLayout()
         namecol.setSpacing(6)
@@ -135,8 +131,20 @@ class AboutTab(QWidget):
         outer.setContentsMargins(0, 0, 0, 0)
         outer.addWidget(scrollable(body))
 
+    def _set_logo(self, accent: str) -> None:
+        """Tint the moon-v2 brand mark to the accent (rendered 2× then scaled
+        down for crisp edges). Best-effort — never block the tab on art."""
+        try:
+            pm = glyph_pixmap(accent, _LOGO_PX * 2).scaled(
+                _LOGO_PX, _LOGO_PX, Qt.KeepAspectRatio, Qt.SmoothTransformation
+            )
+            self._logo.setPixmap(pm)
+        except Exception:  # noqa: BLE001
+            pass
+
     def reflect_accent(self, primary: str) -> None:
-        """Recolor the brand text + repo link to the user's accent."""
+        """Recolor the logo + brand text + repo link to the user's accent."""
+        self._set_logo(primary)
         self._brand.setStyleSheet(f"color: {primary}; font-weight: 700;")
         self._link.setText(
             f'<a href="{_REPO_URL}" style="color: {primary};">{_REPO_URL}</a>'

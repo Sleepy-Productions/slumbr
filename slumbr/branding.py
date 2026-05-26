@@ -1,0 +1,59 @@
+"""Brand-mark (moon-v2 ring) recoloring.
+
+The vendored master art (assets/icon-master.png) is a glowing ring on an
+opaque near-black square. ``colorized_glyph`` turns it into a ring of a chosen
+accent color floating on transparency, cropped to fill — used both by the
+build-time icon bake (scripts/build_icon.py, static brand color) and at runtime
+to tint the logo / window icon to the user's accent so the symbol always
+matches the rest of the app.
+
+Pure PIL + numpy (no Qt) so the build script can import it without pulling in
+PySide6; the Qt wrappers live in ui/_widgets.py.
+"""
+
+from __future__ import annotations
+
+from functools import lru_cache
+from pathlib import Path
+
+import numpy as np
+from PIL import Image
+
+_MASTER = Path(__file__).resolve().parent / "assets" / "icon-master.png"
+
+
+def _hex_rgb(s: str) -> tuple[int, int, int]:
+    s = s.lstrip("#")
+    return (int(s[0:2], 16), int(s[2:4], 16), int(s[4:6], 16))
+
+
+@lru_cache(maxsize=16)
+def colorized_glyph(accent_hex: str, size: int = 256) -> Image.Image:
+    """The moon-v2 ring recolored to ``accent_hex``, on transparency, square,
+    cropped to fill. Cached per (color, size) — cheap to call repeatedly."""
+    im = Image.open(_MASTER).convert("RGB")
+    arr = np.asarray(im).astype(np.float32)
+    # Brightness = max channel (captures the glow regardless of hue). Drives
+    # both alpha (black backing -> transparent) and the tint intensity.
+    t = arr.max(axis=2) / 255.0
+    alpha = np.clip(t * 1.35, 0.0, 1.0)
+    accent = np.array(_hex_rgb(accent_hex), dtype=np.float32)
+    # Only the hottest core lifts toward white, for a glowing-filament look;
+    # everything else is the accent scaled by brightness.
+    highlight = np.clip((t - 0.55) / 0.45, 0.0, 1.0) ** 2
+    base = accent[None, None, :] * np.clip(t * 1.25, 0.0, 1.0)[..., None]
+    white = np.array([255.0, 255.0, 255.0])
+    rgb = base * (1.0 - highlight[..., None]) + white * highlight[..., None]
+    out = np.dstack([rgb, alpha * 255.0]).clip(0, 255).astype("uint8")
+    img = Image.fromarray(out, "RGBA")
+    # Crop to the ring (drop the transparent margin) so it fills the canvas.
+    bbox = img.split()[3].point(lambda x: 255 if x > 28 else 0).getbbox()
+    if bbox:
+        img = img.crop(bbox)
+    w, h = img.size
+    side = max(w, h)
+    square = Image.new("RGBA", (side, side), (0, 0, 0, 0))
+    square.paste(img, ((side - w) // 2, (side - h) // 2))
+    if side != size:
+        square = square.resize((size, size), Image.LANCZOS)
+    return square
