@@ -226,8 +226,18 @@ def field_hint(text: str) -> QLabel:
 
 def scrollable(content: QWidget) -> QScrollArea:
     sc = QScrollArea()
+    # The QScrollArea VIEWPORT (the area behind the cards + text) is NOT colored
+    # by a `QScrollArea {}` rule — it falls back to the Qt palette, which is the
+    # OS-default GREY on some Windows setups. Paint the content widget itself an
+    # explicit theme-black so that grey can never show through, regardless of
+    # palette. (This was the "grey behind the bubbles".)
+    content.setObjectName("scrollBody")
     sc.setWidget(content)
     sc.setWidgetResizable(True)
     sc.setFrameShape(QFrame.NoFrame)
-    sc.setStyleSheet(f"QScrollArea {{ background: {BG_DARK}; border: none; }}")
+    sc.setStyleSheet(
+        f"QScrollArea {{ background: {BG_DARK}; border: none; }} "
+        f"#qt_scrollarea_viewport {{ background-color: {BG_DARK}; }} "
+        f"#scrollBody {{ background-color: {BG_DARK}; }}"
+    )
     return sc

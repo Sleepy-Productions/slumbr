@@ -93,6 +93,10 @@ class SlumbrApp:
         # ----- QApplication first, so the wizard can use Qt widgets.
         self.qapp = QApplication(sys.argv)
         self.qapp.setQuitOnLastWindowClosed(False)
+        # Black palette so non-stylesheet surfaces (scroll viewports, etc.)
+        # don't fall back to the OS-default grey behind the dark UI.
+        from .theme import apply_dark_palette
+        apply_dark_palette(self.qapp)
 
         # ----- Config (with legacy → BackendConfig migration). Loaded before
         # the window icon so the icon can be tinted to the user's accent.
