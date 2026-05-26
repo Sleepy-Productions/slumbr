@@ -10,15 +10,18 @@ import time
 from datetime import datetime
 
 from PySide6.QtCore import QRect, QSize, Qt, Signal
-from PySide6.QtGui import QColor, QFont, QFontMetrics
+from PySide6.QtGui import QColor, QCursor, QFont, QFontMetrics, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
+    QApplication,
     QHBoxLayout,
     QLabel,
     QListWidget,
     QListWidgetItem,
+    QMenu,
     QPushButton,
     QStyle,
     QStyledItemDelegate,
+    QToolTip,
     QVBoxLayout,
     QWidget,
 )
@@ -96,6 +99,9 @@ class HistoryTab(QWidget):
         header_row.addStretch(1)
         self._count_tag = tag("0")
         header_row.addWidget(self._count_tag)
+        self._copy_all_btn = QPushButton("Copy all")
+        self._copy_all_btn.clicked.connect(self._on_copy_all)
+        header_row.addWidget(self._copy_all_btn)
         self._clear_btn = QPushButton("Clear history")
         self._clear_btn.setObjectName("destructive")
         self._clear_btn.clicked.connect(self._on_clear_clicked)
@@ -105,13 +111,22 @@ class HistoryTab(QWidget):
         layout.addWidget(
             subheading(
                 "The last 30 transcripts Slumbr has produced — older ones clear "
-                "automatically. Local only, never sent anywhere."
+                "automatically. Local only, never sent anywhere. "
+                "Double-click, right-click, or select + Ctrl+C to copy a line."
             )
         )
 
         self._list = QListWidget()
         self._list.setItemDelegate(_HistoryDelegate())
         self._list.setMouseTracking(True)  # so rows highlight on hover
+        # Copy a transcript out: double-click, right-click, or select + Ctrl+C.
+        # (A dictation that got "sent" with no field focused still lands here,
+        # so it needs to be recoverable without digging through the log file.)
+        self._list.itemDoubleClicked.connect(self._copy_item)
+        self._list.setContextMenuPolicy(Qt.CustomContextMenu)
+        self._list.customContextMenuRequested.connect(self._show_context_menu)
+        _copy_sc = QShortcut(QKeySequence.StandardKey.Copy, self._list)
+        _copy_sc.activated.connect(self._copy_selected)
         self._list.setStyleSheet(
             f"""
             QListWidget {{
@@ -156,6 +171,10 @@ class HistoryTab(QWidget):
         cap = getattr(history, "MAX_ENTRIES", 30)
         self._count_tag.setText(f"{len(entries)} / {cap}")
         self._count_tag.setVisible(bool(entries))
+        # Nothing to copy/clear on an empty list — disabled (exercises the
+        # dialog's :disabled styling, and reads correctly).
+        self._copy_all_btn.setEnabled(bool(entries))
+        self._clear_btn.setEnabled(bool(entries))
         self._empty_label.setVisible(not entries)
         self._list.setVisible(bool(entries))
 
@@ -163,6 +182,39 @@ class HistoryTab(QWidget):
         history.clear()
         self.refresh()
         self.history_cleared.emit()
+
+    # ------------------------------------------------------------- copy
+    def _copy_text(self, text: str) -> None:
+        text = (text or "").strip()
+        if not text:
+            return
+        QApplication.clipboard().setText(text)
+        QToolTip.showText(QCursor.pos(), "Copied ✓", self._list)
+
+    def _copy_item(self, item: QListWidgetItem | None) -> None:
+        if item is not None:
+            self._copy_text(item.data(_TEXT_ROLE))
+
+    def _copy_selected(self) -> None:
+        self._copy_item(self._list.currentItem())
+
+    def _on_copy_all(self) -> None:
+        entries = history.load_all()  # oldest-first — reads as a chronological log
+        if not entries:
+            return
+        blob = "\n".join(f"[{_format_ts(e.ts)}] {e.text}" for e in entries)
+        QApplication.clipboard().setText(blob)
+        QToolTip.showText(
+            QCursor.pos(), f"Copied {len(entries)} transcripts ✓", self._copy_all_btn
+        )
+
+    def _show_context_menu(self, pos) -> None:
+        menu = QMenu(self._list)
+        item = self._list.itemAt(pos)
+        if item is not None:
+            menu.addAction("Copy", lambda: self._copy_item(item))
+        menu.addAction("Copy all", self._on_copy_all)
+        menu.exec(self._list.mapToGlobal(pos))
 
 
 def _format_ts(ts: float) -> str:
