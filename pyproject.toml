@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "slumbr"
-version = "0.2.0"
+version = "0.3.0"
 description = "Local voice-to-text dictation runner for Windows (offline, Whisper-powered)."
 readme = "README.md"
 license = { file = "LICENSE" }
