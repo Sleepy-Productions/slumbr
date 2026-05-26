@@ -2,11 +2,11 @@
 
 All notable changes to Slumbr are documented in this file. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Slumbr's versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-Slumbr is in pre-1.0; the public API and config format may shift between minor releases. The first 1.0 will lock both.
+Slumbr follows SemVer: **MAJOR** for breaking changes (config format / behavior), **MINOR** for new features, **PATCH** for fixes.
 
-## [0.3.0] — 2026-05-26
+## [1.0.0] — 2026-05-26
 
-The launch-readiness release. A reorganized Settings UI, a session-scoped History with a recovery safety net, proper Windows app identity (no more "pins as Python"), and a pile of polish + correctness fixes.
+The **1.0 public launch.** A reorganized Settings UI, a session-scoped History with a recovery safety net, proper Windows app identity (no more "pins as Python"), and a pile of polish + correctness fixes.
 
 ### Added
 - **Session logs + crash recovery.** When live History fills to 30 it rolls the batch into a temporary *session log* and the list resets fresh; rolled batches are browsable from a "Session logs" drill-in and cleared on a clean quit. If Slumbr closes unexpectedly, the last session's transcripts are written to `%APPDATA%\Slumbr\crash-logs\` and offered back via a Recover / Discard prompt on next launch; uncaught exceptions also drop a traceback crash log.
