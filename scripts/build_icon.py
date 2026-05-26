@@ -15,8 +15,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from slumbr.branding import colorized_glyph
-from slumbr.theme import VIOLET_PRIMARY
+from slumbr.branding import LOGO_COLOR, colorized_glyph
 
 ROOT = Path(__file__).resolve().parents[1]
 ASSETS = ROOT / "slumbr" / "assets"
@@ -27,11 +26,11 @@ SIZES = [16, 24, 32, 48, 64, 128, 256]
 
 def main() -> None:
     ASSETS.mkdir(parents=True, exist_ok=True)
-    im = colorized_glyph(VIOLET_PRIMARY, 256)
+    im = colorized_glyph(LOGO_COLOR, 256)
     # Pillow's ICO encoder embeds every requested size, downscaled with LANCZOS.
     im.save(OUT_PATH, format="ICO", sizes=[(s, s) for s in SIZES])
     im.save(ASSETS / "icon.png")
-    print(f"wrote {OUT_PATH} (and icon.png) tinted {VIOLET_PRIMARY}, sizes {SIZES}")
+    print(f"wrote {OUT_PATH} (and icon.png) — monochrome {LOGO_COLOR}, sizes {SIZES}")
 
 
 if __name__ == "__main__":

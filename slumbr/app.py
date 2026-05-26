@@ -446,14 +446,16 @@ class SlumbrApp:
         dlg.activateWindow()
 
     def _build_app_icon(self) -> QIcon | None:
-        """Window/taskbar icon: the moon-v2 brand mark tinted to the user's
-        accent. Falls back to the static brand .ico, then None."""
+        """Window/taskbar icon: the FIXED monochrome moon-v2 brand mark — the
+        symbol stays black-and-white, it doesn't follow the accent. Falls back
+        to the static .ico, then None."""
         try:
+            from .branding import LOGO_COLOR
             from .ui.tabs._widgets import glyph_icon
 
-            return glyph_icon(self.config.accent_color, 256)
+            return glyph_icon(LOGO_COLOR, 256)
         except Exception:  # noqa: BLE001
-            log.exception("accent app-icon failed; using static .ico")
+            log.exception("brand app-icon failed; using static .ico")
             return QIcon(str(_ICON_PATH)) if _ICON_PATH.is_file() else None
 
     def _on_config_changed(self) -> None:
@@ -489,10 +491,8 @@ class SlumbrApp:
         self.popup.set_follow_cursor(self.config.popup_follow_cursor)
         self.popup.set_accent(self.config.accent_color)
         self.tray.set_accent(self.config.accent_color)
-        # Window/taskbar icon tracks the accent too.
-        self._app_icon = self._build_app_icon()
-        if self._app_icon is not None:
-            self.qapp.setWindowIcon(self._app_icon)
+        # (The window/taskbar icon is a fixed monochrome brand mark — it does
+        # NOT track the accent, so nothing to rebuild here.)
         # Refresh the tray menu so quick-toggle checkmarks reflect new state.
         self.tray.refresh_menu()
 
