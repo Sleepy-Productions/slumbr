@@ -13,7 +13,33 @@
 # slumbr/__init__._add_nvidia_dll_dirs. Verify the first transcribe loads
 # cublas/cudnn on a clean machine.
 
+import os
+
 from PyInstaller.utils.hooks import collect_all, collect_submodules
+
+# cuDNN sub-libraries + NVRTC that CTranslate2's Whisper inference never loads
+# (it's cuBLAS/GEMM-based — proven empirically via EnumProcessModulesEx during a
+# real large-v3-turbo int8_float16 transcription: only cublas64_12, cublasLt64_12
+# and the tiny cudnn64_9 dispatcher map in). Pruning these from the frozen bundle
+# saves ~1.18 GB. cudnn64_9.dll is KEPT — it's a link-time import of
+# ctranslate2.dll, but it only lazily loads these heavy sub-libs on a cuDNN call,
+# which CTranslate2 never makes for this workload. Filtered off a.binaries AFTER
+# Analysis so the nvidia.cudnn collector hook can't re-add them.
+_PRUNE_DLLS = {
+    "cudnn_adv64_9.dll",
+    "cudnn_cnn64_9.dll",
+    "cudnn_graph64_9.dll",
+    "cudnn_ops64_9.dll",
+    "cudnn_heuristic64_9.dll",
+    "cudnn_engines_precompiled64_9.dll",
+    "cudnn_engines_runtime_compiled64_9.dll",
+    "cudnn_engines_tensor_ir64_9.dll",
+    "cudnn_ext64_9.dll",
+    "nvrtc64_120_0.dll",
+    "nvrtc64_120_0.alt.dll",
+    "nvrtc-builtins64_129.dll",
+    "nvblas64_12.dll",
+}
 
 datas: list = []
 binaries: list = []
@@ -55,6 +81,13 @@ a = Analysis(
     ],
     noarchive=False,
 )
+# Drop the unused cuDNN sub-libs + NVRTC (see _PRUNE_DLLS). Runs after Analysis
+# so it also strips what the nvidia.cudnn / nvidia.cuda_nvrtc hooks collected.
+_before = len(a.binaries)
+a.binaries = [
+    b for b in a.binaries if os.path.basename(b[0]).lower() not in _PRUNE_DLLS
+]
+print(f"[slumbr] pruned {_before - len(a.binaries)} CUDA DLLs from the bundle")
 pyz = PYZ(a.pure)
 exe = EXE(pyz, a.scripts, [], exclude_binaries=True, name="Slumbr", console=False,
           icon="../slumbr/assets/icon.ico")
