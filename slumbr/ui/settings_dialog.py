@@ -27,9 +27,7 @@ from ..theme import (
     BORDER,
     TEXT_PRIMARY,
     TEXT_SECONDARY,
-    VIOLET_DEEP,
-    VIOLET_PRIMARY,
-    VIOLET_PRIMARY_HOVER,
+    derive_accent,
 )
 from .tabs.about import AboutTab
 from .tabs.behavior import BehaviorTab
@@ -39,8 +37,10 @@ from .tabs.shortcuts import ShortcutsTab
 from .tabs.voice import VoiceTab
 
 
-def _dialog_qss() -> str:
-    """Trim of the old hub stylesheet — same look, no sidebar bits."""
+def _dialog_qss(primary: str, hover: str, deep: str, pill_bg: str) -> str:
+    """Dialog stylesheet, recolored from the user's accent. ``primary`` is the
+    chosen color; ``hover``/``deep`` are derived shades; ``pill_bg`` is the
+    translucent hotkey-pill fill (see theme.derive_accent)."""
     return f"""
     QDialog {{ background-color: {BG_DARK}; }}
     QWidget {{ color: {TEXT_PRIMARY}; font-family: "Segoe UI"; }}
@@ -62,7 +62,7 @@ def _dialog_qss() -> str:
     }}
     QTabBar::tab:selected {{
         color: {TEXT_PRIMARY};
-        border-bottom: 2px solid {VIOLET_PRIMARY};
+        border-bottom: 2px solid {primary};
         font-weight: 700;
     }}
 
@@ -74,21 +74,21 @@ def _dialog_qss() -> str:
         padding: 9px 18px;
         font-weight: 500;
     }}
-    QPushButton:hover {{ border: 1px solid {VIOLET_PRIMARY}; }}
+    QPushButton:hover {{ border: 1px solid {primary}; }}
     QPushButton:pressed {{
-        background-color: {VIOLET_DEEP};
-        border: 1px solid {VIOLET_DEEP};
+        background-color: {deep};
+        border: 1px solid {deep};
     }}
-    QPushButton:focus {{ border: 1px solid {VIOLET_PRIMARY}; outline: none; }}
+    QPushButton:focus {{ border: 1px solid {primary}; outline: none; }}
     QPushButton#primary {{
-        background-color: {VIOLET_PRIMARY};
-        border: 1px solid {VIOLET_PRIMARY};
+        background-color: {primary};
+        border: 1px solid {primary};
         font-weight: 700;
         padding: 11px 22px;
     }}
     QPushButton#primary:hover {{
-        background-color: {VIOLET_PRIMARY_HOVER};
-        border: 1px solid {VIOLET_PRIMARY_HOVER};
+        background-color: {hover};
+        border: 1px solid {hover};
     }}
     QPushButton#destructive:hover {{
         border: 1px solid #C97A7A;
@@ -101,15 +101,15 @@ def _dialog_qss() -> str:
         border-radius: 10px;
         padding: 10px 14px;
         min-height: 24px;
-        selection-background-color: {VIOLET_PRIMARY};
+        selection-background-color: {primary};
     }}
-    QComboBox:hover {{ border: 1px solid {VIOLET_PRIMARY}; }}
-    QComboBox:focus {{ border: 1px solid {VIOLET_PRIMARY}; }}
+    QComboBox:hover {{ border: 1px solid {primary}; }}
+    QComboBox:focus {{ border: 1px solid {primary}; }}
     QComboBox QAbstractItemView {{
         background-color: {BG_PANEL};
         color: {TEXT_PRIMARY};
         border: 1px solid {BORDER};
-        selection-background-color: {VIOLET_PRIMARY};
+        selection-background-color: {primary};
         selection-color: {TEXT_PRIMARY};
         outline: 0;
         padding: 6px;
@@ -123,10 +123,10 @@ def _dialog_qss() -> str:
         border-radius: 5px;
         background: {BG_PANEL_HI};
     }}
-    QCheckBox::indicator:hover {{ border: 1px solid {VIOLET_PRIMARY}; }}
+    QCheckBox::indicator:hover {{ border: 1px solid {primary}; }}
     QCheckBox::indicator:checked {{
-        background: {VIOLET_PRIMARY};
-        border: 1px solid {VIOLET_PRIMARY};
+        background: {primary};
+        border: 1px solid {primary};
     }}
 
     QTextEdit, QPlainTextEdit {{
@@ -135,16 +135,16 @@ def _dialog_qss() -> str:
         border-radius: 12px;
         padding: 14px;
         color: {TEXT_PRIMARY};
-        selection-background-color: {VIOLET_PRIMARY};
+        selection-background-color: {primary};
     }}
     QTextEdit:focus, QPlainTextEdit:focus {{
-        border: 1px solid {VIOLET_PRIMARY};
+        border: 1px solid {primary};
     }}
 
     QLabel#hotkey-pill {{
-        background-color: rgba(155, 111, 224, 40);
-        color: {VIOLET_PRIMARY};
-        border: 1px solid {VIOLET_DEEP};
+        background-color: {pill_bg};
+        color: {primary};
+        border: 1px solid {deep};
         border-radius: 10px;
         padding: 6px 14px;
         font-weight: 700;
@@ -160,7 +160,7 @@ def _dialog_qss() -> str:
         border-radius: 5px;
         min-height: 40px;
     }}
-    QScrollBar::handle:vertical:hover {{ background: {VIOLET_DEEP}; }}
+    QScrollBar::handle:vertical:hover {{ background: {deep}; }}
     QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; background: transparent; }}
     QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{ background: transparent; }}
     """
@@ -194,7 +194,7 @@ class SettingsDialog(QDialog):
         self.setWindowFlag(Qt.WindowContextHelpButtonHint, False)
         if app_icon is not None:
             self.setWindowIcon(app_icon)
-        self.setStyleSheet(_dialog_qss())
+        self.setStyleSheet(_dialog_qss(*derive_accent(config.accent_color)))
         self.setMinimumSize(820, 620)
         self.resize(960, 720)
         # Modeless — the tray hotkey + popup keep working while the
@@ -235,6 +235,11 @@ class SettingsDialog(QDialog):
         # dialog.
         self._tabs.currentChanged.connect(self._on_tab_changed)
 
+        # Propagate the accent to the tab widgets that style themselves
+        # inline (engine cards, key picker) — the dialog QSS above already
+        # covers the shared chrome.
+        self._apply_accent()
+
     # ----------------------------------------------------- external API
 
     def jump_to_engine(self) -> None:
@@ -249,7 +254,16 @@ class SettingsDialog(QDialog):
     # ----------------------------------------------------- handlers
 
     def _handle_config_changed(self) -> None:
+        # Re-apply the accent so picking a color in Appearance recolors the
+        # whole dialog live (cheap + idempotent when the color is unchanged).
+        self._apply_accent()
         self._on_config_changed()
+
+    def _apply_accent(self) -> None:
+        primary, hover, deep, pill_bg = derive_accent(self._config.accent_color)
+        self.setStyleSheet(_dialog_qss(primary, hover, deep, pill_bg))
+        self._engine_tab.reflect_accent(primary)
+        self._shortcuts_tab.reflect_accent(primary, deep)
 
     def _handle_hotkey_changed(self, vks: list[int]) -> None:
         # The app callback owns persistence + the live rebind + tray label

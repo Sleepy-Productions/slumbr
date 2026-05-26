@@ -130,3 +130,6 @@ class ShortcutsTab(QWidget):
     def set_hotkey(self, vks: list[int]) -> None:
         self._picker.set_current_combo(vks)
         self._bound_pill.setText(combo_label(vks))
+
+    def reflect_accent(self, primary: str, deep: str) -> None:
+        self._picker.reflect_accent(primary, deep)

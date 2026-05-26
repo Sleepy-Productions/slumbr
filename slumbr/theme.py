@@ -33,3 +33,35 @@ COLOR_TRANSCRIBING = VIOLET_DEEP
 COLOR_PASTING = VIOLET_DEEP
 COLOR_SENT = "#5FB87A"  # confident green — brief "✓ Sent" confirmation flash
 COLOR_ERROR = "#E0685F"  # red — brief "✗ Failed" flash when something goes wrong
+
+
+# ---- accent derivation ----------------------------------------------------
+# The user-chosen accent (config.accent_color, default = VIOLET_PRIMARY)
+# drives the whole UI. From the single picked color we derive the lighter
+# "hover" and darker "deep" shades the stylesheets need, so one pick recolors
+# everything coherently.
+
+def _hex_to_rgb(h: str) -> tuple[int, int, int]:
+    h = h.lstrip("#")
+    return int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+
+
+def _mix(rgb: tuple[float, float, float], target: tuple[int, int, int], t: float) -> str:
+    r, g, b = (c + (tc - c) * t for c, tc in zip(rgb, target, strict=False))
+    return f"#{int(round(r)):02X}{int(round(g)):02X}{int(round(b)):02X}"
+
+
+def derive_accent(accent_hex: str) -> tuple[str, str, str, str]:
+    """From one accent hex return ``(primary, hover, deep, pill_bg_rgba)``:
+    the color itself, a lighter hover shade, a darker pressed/deep shade, and
+    a translucent fill for the hotkey pill. Falls back to the house violet on
+    a malformed value."""
+    try:
+        rgb = _hex_to_rgb(accent_hex)
+    except (ValueError, IndexError):
+        rgb = _hex_to_rgb(VIOLET_PRIMARY)
+    primary = f"#{rgb[0]:02X}{rgb[1]:02X}{rgb[2]:02X}"
+    hover = _mix(rgb, (255, 255, 255), 0.16)  # 16% toward white
+    deep = _mix(rgb, (0, 0, 0), 0.22)         # 22% toward black
+    pill_bg = f"rgba({rgb[0]}, {rgb[1]}, {rgb[2]}, 40)"
+    return primary, hover, deep, pill_bg
