@@ -121,6 +121,7 @@ class SlumbrApp:
         self.popup = RecordingPopup()
         self.popup.set_compact(self.config.compact_popup)
         self.popup.set_follow_cursor(self.config.popup_follow_cursor)
+        self.popup.set_accent(self.config.accent_color)
         self.foreground = ForegroundTracker()
         self.foreground.start()
         self._paste_target_hwnd: int | None = None
@@ -461,6 +462,7 @@ class SlumbrApp:
         # Popup look (compact vs full) + cursor-follow.
         self.popup.set_compact(self.config.compact_popup)
         self.popup.set_follow_cursor(self.config.popup_follow_cursor)
+        self.popup.set_accent(self.config.accent_color)
         # Refresh the tray menu so quick-toggle checkmarks reflect new state.
         self.tray.refresh_menu()
 
