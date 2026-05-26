@@ -53,6 +53,20 @@ def _mix(rgb: tuple[float, float, float], target: tuple[int, int, int], t: float
     return f"#{int(round(r)):02X}{int(round(g)):02X}{int(round(b)):02X}"
 
 
+def text_on(bg_hex: str) -> str:
+    """Readable foreground for text/icons placed ON a solid fill of ``bg_hex``.
+    Returns near-black for a light fill, else the normal light body color — so
+    a light/white accent yields dark text instead of invisible white-on-white
+    (e.g. a white primary button keeps black text)."""
+    try:
+        r, g, b = _hex_to_rgb(bg_hex)
+    except (ValueError, IndexError):
+        return TEXT_PRIMARY
+    # Perceptual (sRGB) luminance, 0..1.
+    lum = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255
+    return "#0A0A0B" if lum > 0.6 else TEXT_PRIMARY
+
+
 def derive_accent(accent_hex: str) -> tuple[str, str, str, str]:
     """From one accent hex return ``(primary, hover, deep, pill_bg_rgba)``:
     the color itself, a lighter hover shade, a darker pressed/deep shade, and
