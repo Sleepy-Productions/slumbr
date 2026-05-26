@@ -39,6 +39,7 @@ from ..theme import (
     BG_PANEL,
     BG_PANEL_HI,
     BORDER,
+    RADIUS_CARD,
     TEXT_PRIMARY,
     TEXT_SECONDARY,
     VIOLET_DEEP,
@@ -117,7 +118,7 @@ def _build_qss(primary: str, deep: str) -> str:
 QFrame#keyboard-frame {{
     background-color: {BG_PANEL};
     border: 1px solid {BORDER};
-    border-radius: 14px;
+    border-radius: {RADIUS_CARD}px;
     padding: 18px;
 }}
 QPushButton {{
