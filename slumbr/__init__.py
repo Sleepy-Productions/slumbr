@@ -25,6 +25,17 @@ from pathlib import Path
 __version__ = "0.2.0"
 
 
+# PyInstaller windowed builds (console=False) — and pythonw.exe — leave
+# sys.stdout / sys.stderr as None. Any library that writes to them dies with
+# "'NoneType' object has no attribute 'write'"; the one that bit us is the
+# tqdm progress bar inside huggingface_hub's model download on first run.
+# Point them at devnull so a stray write is a harmless no-op. Must run before
+# anything logs or downloads.
+for _stream_name in ("stdout", "stderr"):
+    if getattr(sys, _stream_name, None) is None:
+        setattr(sys, _stream_name, open(os.devnull, "w", encoding="utf-8"))  # noqa: SIM115
+
+
 def _configure_logging() -> None:
     """One-time root-logger setup.
 

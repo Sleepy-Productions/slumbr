@@ -30,6 +30,11 @@ dependencies = [
     # always run Moonshine + Silero VAD + online-punct on CPU regardless
     # of which primary backend the user picks. ~80 MB.
     "sherpa-onnx>=1.13",
+    # huggingface_hub downloads the Moonshine + Silero VAD + punctuation
+    # models for that always-on streaming path, so it's core too — NOT
+    # optional. (It used to arrive only transitively via the faster-whisper
+    # extra, which left CPU/base installs unable to fetch any model.)
+    "huggingface_hub",
     # Audio capture + hotkey + paste — every backend needs them.
     "sounddevice==0.3.12",
     "numpy",
