@@ -46,6 +46,7 @@ from ..theme import (
     BORDER,
     COLOR_IDLE,
     COLOR_RECORDING,
+    COLOR_SENT,
     COLOR_TRANSCRIBING,
     TEXT_SECONDARY,
     VIOLET_PRIMARY,
@@ -536,6 +537,15 @@ class RecordingPopup(QWidget):
         self._resize_to: tuple[int, int] = (_POPUP_W, _POPUP_H)
         self._resize_top_y: int = 0  # screen-space y of the pinned top edge
 
+        # "✓ Sent" confirmation. After a successful paste the popup turns
+        # green + shows the check for a beat so the user KNOWS the message
+        # landed, then auto-hides. Single-shot.
+        self._sent_flash = False
+        self._sent_timer = QTimer(self)
+        self._sent_timer.setSingleShot(True)
+        self._sent_timer.setInterval(700)
+        self._sent_timer.timeout.connect(self._finish_sent)
+
         self._dot = _StatusDot(self)
 
         self._elapsed_label = QLabel("0:00", self)
@@ -577,7 +587,10 @@ class RecordingPopup(QWidget):
     def paintEvent(self, _event) -> None:  # noqa: N802
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
-        p.setPen(QPen(QColor(BORDER), 1))
+        # Green border while flashing "✓ Sent"; normal border otherwise.
+        border_color = COLOR_SENT if self._sent_flash else BORDER
+        width = 2 if self._sent_flash else 1
+        p.setPen(QPen(QColor(border_color), width))
         p.setBrush(QBrush(QColor(BG_PANEL)))
         p.drawRoundedRect(self.rect().adjusted(0, 0, -1, -1), 12, 12)
 
@@ -600,6 +613,9 @@ class RecordingPopup(QWidget):
 
     # ------------------------------------------------------------------ API
     def show_recording(self) -> None:
+        # Cancel any in-flight "✓ Sent" flash from the previous utterance.
+        self._sent_timer.stop()
+        self._sent_flash = False
         self._dot.set_color(COLOR_RECORDING)
         self._elapsed_label.setText("0:00")
         self._visualizer.start()
@@ -656,7 +672,31 @@ class RecordingPopup(QWidget):
         m, s = divmod(int(seconds), 60)
         self._elapsed_label.setText(f"{m}:{s:02d}")
 
+    def flash_sent(self) -> None:
+        """Confirm a successful paste with a brief green "✓ Sent", then
+        auto-hide. The green border flash shows in compact mode too; the
+        dot + label only exist in the normal layout.
+        """
+        self._visualizer.stop()
+        self._follow_timer.stop()
+        self._resize_timer.stop()
+        self._collapse_partial(animated=False)
+        self._sent_flash = True
+        if not self._compact:
+            self._dot.set_color(COLOR_SENT)
+            self._elapsed_label.setText("✓ Sent")
+        if not self.isVisible():
+            self.show()
+            self.raise_()
+        self.update()
+        self._sent_timer.start()
+
+    def _finish_sent(self) -> None:
+        self._sent_flash = False
+        self.hide_popup()
+
     def hide_popup(self) -> None:
+        self._sent_flash = False
         self._visualizer.stop()
         self._follow_timer.stop()
         self._collapse_partial()
@@ -726,9 +766,13 @@ class RecordingPopup(QWidget):
         w, h = self._resting_size()
         self.setFixedSize(w, h)
         # If we're currently visible, re-anchor so the change doesn't
-        # leave the popup mid-screen at the wrong size.
+        # leave the popup mid-screen at the wrong size, and make sure
+        # cursor-follow keeps tracking (so the toggle doesn't feel like
+        # it "locks" the popup in place mid-session).
         if self.isVisible():
             self._reposition()
+            if self._follow_enabled and not self._follow_timer.isActive():
+                self._follow_timer.start()
 
     # ------------------------------------------------------------- internal
     def _resting_size(self) -> tuple[int, int]:

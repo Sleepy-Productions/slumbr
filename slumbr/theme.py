@@ -31,3 +31,4 @@ COLOR_IDLE = "#9090A0"  # neutral gray; bumped from #7A7A82 for taskbar contrast
 COLOR_RECORDING = VIOLET_PRIMARY
 COLOR_TRANSCRIBING = VIOLET_DEEP
 COLOR_PASTING = VIOLET_DEEP
+COLOR_SENT = "#5FB87A"  # confident green — brief "✓ Sent" confirmation flash

@@ -354,6 +354,7 @@ class SlumbrApp:
         self.tray.refresh_menu()
 
         t_paste_start = time.monotonic()
+        paste_ok = True
         try:
             paste_text(
                 polished,
@@ -364,6 +365,7 @@ class SlumbrApp:
             )
         except Exception as e:  # noqa: BLE001
             log.error("paste failed: %s", e)
+            paste_ok = False
         t_end = time.monotonic()
         log.info(
             "timing: stop->transcribed %.0fms transcribed->paste %.0fms paste %.0fms total %.0fms",
@@ -372,13 +374,13 @@ class SlumbrApp:
             (t_end - t_paste_start) * 1000,
             (t_end - self._t_stop_pressed) * 1000,
         )
-        self._reset_to_idle()
+        self._reset_to_idle(sent=paste_ok)
 
     def _on_transcribe_failed(self, msg: str) -> None:
         log.error("transcribe failed: %s", msg)
         self._reset_to_idle()
 
-    def _reset_to_idle(self) -> None:
+    def _reset_to_idle(self, *, sent: bool = False) -> None:
         self.state.try_transition(State.IDLE, force=True)
         log.debug("-> IDLE")
         # Release the reverse-PTT mute key so the call app un-mutes
@@ -389,7 +391,12 @@ class SlumbrApp:
         # or already unmuted.
         if self.mic_mirror is not None:
             self.mic_mirror.set_muted(False)
-        self.popup.hide_popup()
+        # On a successful paste, flash "✓ Sent" (self-hides) so the user
+        # gets an unmistakable confirmation; otherwise just hide.
+        if sent:
+            self.popup.flash_sent()
+        else:
+            self.popup.hide_popup()
         self.tray.set_state(State.IDLE)
 
     def _update_elapsed(self) -> None:
