@@ -1,23 +1,31 @@
 """Settings dialog — replaces the deleted MainWindow hub.
 
-Tray menu's "Settings…" pops this. Tabs are independent widgets that
-emit signals back to the app via callbacks passed at construction.
+Tray menu's "Settings…" pops this. Pages are independent widgets that
+emit signals back to the app via callbacks passed at construction, shown
+through a left-sidebar nav (QListWidget) + QStackedWidget, grouped:
 
-Order chosen so the most-changed knobs are leftmost:
-    Engine | Voice | Behavior | Shortcuts | History | About
+    SETUP        Engine · Voice · Shortcuts
+    PREFERENCES  Behavior · Customization · Advanced
+    INFO         History · About
 
-Engine first because it's the only tab whose value invalidates the
-others (changing backend reshuffles the model dropdown). About last
-per OS convention.
+Engine leads because it's the only page whose value invalidates the
+others (changing backend reshuffles the model dropdown). Each page keeps
+its own title heading (the pane's anchor); the sidebar shows where you are.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable
 
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QIcon
-from PySide6.QtWidgets import QDialog, QTabWidget, QVBoxLayout
+from PySide6.QtCore import QSize, Qt
+from PySide6.QtGui import QFont, QIcon
+from PySide6.QtWidgets import (
+    QDialog,
+    QHBoxLayout,
+    QListWidget,
+    QListWidgetItem,
+    QStackedWidget,
+)
 
 from ..config import SlumbrConfig
 from ..theme import (
@@ -61,23 +69,26 @@ def _dialog_qss(primary: str, hover: str, deep: str, pill_bg: str) -> str:
     QWidget {{ color: {TEXT_PRIMARY}; font-family: "{FONT_BODY}", "Segoe UI"; }}
     QLabel {{ color: {TEXT_PRIMARY}; }}
 
-    QTabWidget::pane {{
-        background-color: {BG_DARK};
+    QListWidget#navList {{
+        background-color: {BG_PANEL};
         border: none;
+        border-right: 1px solid {BORDER};
+        outline: 0;
+        padding: 16px 12px;
     }}
-    QTabBar::tab {{
-        background-color: transparent;
+    QListWidget#navList::item {{
         color: {TEXT_SECONDARY};
-        padding: 12px 20px;
-        border: none;
-        margin-right: 4px;
+        border-radius: {RADIUS_MD}px;
+        padding: 10px 14px;
+        margin: 2px 0;
     }}
-    QTabBar::tab:hover {{
+    QListWidget#navList::item:hover {{
         color: {TEXT_PRIMARY};
+        background-color: {BG_PANEL_HI};
     }}
-    QTabBar::tab:selected {{
-        color: {TEXT_PRIMARY};
-        border-bottom: 2px solid {primary};
+    QListWidget#navList::item:selected {{
+        color: {on_primary};
+        background-color: {primary};
         font-weight: 700;
     }}
 
@@ -236,14 +247,8 @@ class SettingsDialog(QDialog):
         # dialog is open. setModal(False) is default but explicit.
         self.setModal(False)
 
-        outer = QVBoxLayout(self)
-        outer.setContentsMargins(0, 0, 0, 0)
-        outer.setSpacing(0)
-
-        self._tabs = QTabWidget()
-        outer.addWidget(self._tabs)
-
-        # Build tab instances
+        # Build page instances (independent widgets; they signal back via
+        # the callbacks wired below).
         self._engine_tab = EngineTab(config)
         self._voice_tab = VoiceTab(config)
         self._behavior_tab = BehaviorTab(config)
@@ -253,14 +258,20 @@ class SettingsDialog(QDialog):
         self._advanced_tab = AdvancedTab(config)
         self._about_tab = AboutTab(config)
 
-        self._tabs.addTab(self._engine_tab, "Engine")
-        self._tabs.addTab(self._voice_tab, "Voice")
-        self._tabs.addTab(self._behavior_tab, "Behavior")
-        self._tabs.addTab(self._customization_tab, "Customization")
-        self._tabs.addTab(self._shortcuts_tab, "Shortcuts")
-        self._tabs.addTab(self._history_tab, "History")
-        self._tabs.addTab(self._advanced_tab, "Advanced")
-        self._tabs.addTab(self._about_tab, "About")
+        # Left-sidebar nav + stacked content pane.
+        self._nav = QListWidget()
+        self._nav.setObjectName("navList")
+        self._nav.setFixedWidth(212)
+        self._nav.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self._stack = QStackedWidget()
+        self._engine_row = 1  # first real row (after the SETUP header); set in _build_nav
+        self._build_nav()
+
+        outer = QHBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+        outer.addWidget(self._nav)
+        outer.addWidget(self._stack, 1)
 
         # Wire signals → app callbacks
         self._engine_tab.config_changed.connect(self._handle_config_changed)
@@ -271,15 +282,53 @@ class SettingsDialog(QDialog):
         self._shortcuts_tab.hotkey_changed.connect(self._handle_hotkey_changed)
         self._about_tab.quit_requested.connect(self._handle_quit)
         self._about_tab.restart_requested.connect(self._handle_restart)
-        # Refresh history each time the user opens the History tab so
-        # entries dictated between opens show up without reopening the
-        # dialog.
-        self._tabs.currentChanged.connect(self._on_tab_changed)
+        # Selecting a nav row swaps the stacked page; History refreshes on
+        # entry so transcripts dictated between opens show up.
+        self._nav.currentRowChanged.connect(self._on_nav_changed)
+        self._nav.setCurrentRow(self._engine_row)
 
         # Propagate the accent to the tab widgets that style themselves
         # inline (engine cards, key picker) — the dialog QSS above already
         # covers the shared chrome.
         self._apply_accent()
+
+    def _build_nav(self) -> None:
+        """Populate the sidebar: non-selectable section headers + one row per
+        page. Page rows store their QStackedWidget index in ``Qt.UserRole``;
+        headers store -1 and are skipped by selection (Qt won't land on a
+        ``NoItemFlags`` row), so the nav reads as grouped without extra widgets.
+        """
+        spec = [
+            ("header", "SETUP", None),
+            ("page", "Engine", self._engine_tab),
+            ("page", "Voice", self._voice_tab),
+            ("page", "Shortcuts", self._shortcuts_tab),
+            ("header", "PREFERENCES", None),
+            ("page", "Behavior", self._behavior_tab),
+            ("page", "Customization", self._customization_tab),
+            ("page", "Advanced", self._advanced_tab),
+            ("header", "INFO", None),
+            ("page", "History", self._history_tab),
+            ("page", "About", self._about_tab),
+        ]
+        for kind, label, widget in spec:
+            if kind == "header":
+                item = QListWidgetItem(label.upper())
+                item.setFlags(Qt.NoItemFlags)
+                hf = QFont(FONT_BODY)
+                hf.setPointSize(8)
+                hf.setBold(True)
+                item.setFont(hf)
+                item.setSizeHint(QSize(0, 34))
+                item.setData(Qt.UserRole, -1)
+            else:
+                idx = self._stack.addWidget(widget)
+                item = QListWidgetItem(label)
+                item.setSizeHint(QSize(0, 42))
+                item.setData(Qt.UserRole, idx)
+                if widget is self._engine_tab:
+                    self._engine_row = self._nav.count()
+            self._nav.addItem(item)
 
     def show(self) -> None:  # noqa: N802
         # Fade the dialog in on open — seamless, ~150ms ease-out (see ui/anim).
@@ -290,7 +339,7 @@ class SettingsDialog(QDialog):
     # ----------------------------------------------------- external API
 
     def jump_to_engine(self) -> None:
-        self._tabs.setCurrentWidget(self._engine_tab)
+        self._nav.setCurrentRow(self._engine_row)
 
     def reflect_hotkey(self, vks: list[int]) -> None:
         """Sync the picker when the hotkey was changed from elsewhere
@@ -332,6 +381,13 @@ class SettingsDialog(QDialog):
         self.accept()
         self._on_restart()
 
-    def _on_tab_changed(self, index: int) -> None:
-        if self._tabs.widget(index) is self._history_tab:
+    def _on_nav_changed(self, row: int) -> None:
+        item = self._nav.item(row)
+        if item is None:
+            return
+        idx = item.data(Qt.UserRole)
+        if idx is None or idx < 0:  # header row — ignore
+            return
+        self._stack.setCurrentIndex(idx)
+        if self._stack.widget(idx) is self._history_tab:
             self._history_tab.refresh()
