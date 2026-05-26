@@ -15,7 +15,7 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw
 
-from slumbr.theme import BG_DARK, VIOLET_PRIMARY
+from slumbr.theme import VIOLET_PRIMARY
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT_PATH = ROOT / "slumbr" / "assets" / "icon.ico"
@@ -29,36 +29,23 @@ def _hex_to_rgb(s: str) -> tuple[int, int, int]:
 
 
 def _render(size: int) -> Image.Image:
+    """A clean accent dot on a fully transparent canvas — no plate.
+
+    The earlier design painted a near-black rounded-square plate behind the
+    dot, which read as "a square around the circle" in the taskbar / alt-tab.
+    Drawing only circles on transparency means the corners stay cut out, so
+    the shell icon matches the tray dot exactly. Same geometry as
+    ``tray._icon_image``: a faint full-canvas halo + a bold inner dot.
+    """
     img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
-    bg = _hex_to_rgb(BG_DARK) + (255,)
     accent = _hex_to_rgb(VIOLET_PRIMARY) + (255,)
-    halo = _hex_to_rgb(VIOLET_PRIMARY) + (90,)
-    # Rounded-square plate sized to the full canvas — at 16×16, draw a
-    # circle instead, the corner radius collapses otherwise.
-    if size <= 24:
-        d.ellipse((0, 0, size - 1, size - 1), fill=bg)
-        margin = max(2, size // 5)
-        d.ellipse(
-            (margin, margin, size - 1 - margin, size - 1 - margin), fill=accent
-        )
-        return img
-    radius = max(4, size // 6)
-    d.rounded_rectangle(
-        (0, 0, size - 1, size - 1), radius=radius, fill=bg
-    )
-    # Halo
-    halo_margin = size // 5
-    d.ellipse(
-        (halo_margin, halo_margin, size - 1 - halo_margin, size - 1 - halo_margin),
-        fill=halo,
-    )
-    # Inner dot
-    dot_margin = size // 4
-    d.ellipse(
-        (dot_margin, dot_margin, size - 1 - dot_margin, size - 1 - dot_margin),
-        fill=accent,
-    )
+    halo = _hex_to_rgb(VIOLET_PRIMARY) + (70,)
+    # Soft halo fills the canvas as a circle — corners stay transparent.
+    d.ellipse((0, 0, size - 1, size - 1), fill=halo)
+    # Bold inner dot.
+    inset = max(1, round(size * 0.14))
+    d.ellipse((inset, inset, size - 1 - inset, size - 1 - inset), fill=accent)
     return img
 
 
