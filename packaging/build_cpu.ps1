@@ -43,12 +43,16 @@ Write-Host "==> Running PyInstaller..."
 Write-Host "==> Portable onedir built: dist\Slumbr\  (run dist\Slumbr\Slumbr.exe to test)"
 
 if ($SkipInstaller) { return }
-$iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
-if (Test-Path $iscc) {
+$iscc = @(
+    "C:\Program Files (x86)\Inno Setup 6\ISCC.exe",
+    "C:\Program Files\Inno Setup 6\ISCC.exe",
+    "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe"
+) | Where-Object { Test-Path $_ } | Select-Object -First 1
+if ($iscc) {
     Write-Host "==> Compiling installer with Inno Setup..."
-    & $iscc packaging\slumbr.iss
+    & $iscc /DFlavor=cpu packaging\slumbr.iss
     Write-Host "==> Installer: packaging\dist-installer\slumbr-setup-cpu.exe"
 } else {
-    Write-Host "Inno Setup not found. Install from https://jrsoftware.org/isinfo.php"
+    Write-Host "Inno Setup not found. Install it (winget install JRSoftware.InnoSetup)"
     Write-Host "then re-run, or just zip dist\Slumbr\ as a portable build."
 }

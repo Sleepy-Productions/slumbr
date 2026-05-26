@@ -9,10 +9,18 @@ PySide6 + ONNX +, for AMD, torch/transformers) balloons to 4–5 GB and the
 hooks are fragile. So we ship **per-stack** builds, smallest first.
 
 ## Status
-- **CPU build** (this folder) — Moonshine + faster-whisper on CPU. Runs on
-  ANY Windows PC, no GPU, no Python. Widest reach; the first milestone.
-- **NVIDIA / AMD flavors** — follow-up. Same approach with the GPU deps
-  included (larger), shipped as separate `slumbr-setup-nvidia.exe` etc.
+- **CPU build** — ✅ DONE. Moonshine + faster-whisper on CPU, runs on ANY
+  Windows PC (no GPU, no Python). Builds to a 176 MB onedir, compiles to a
+  **96 MB `slumbr-setup-cpu.exe`** installer, and runs end-to-end (verified
+  on this machine via a throwaway profile).
+- **NVIDIA flavor** — 🟡 tooling ready (`slumbr-nvidia.spec` + `build_nvidia.ps1`),
+  NOT yet built/verified. Bundles the CUDA runtime (~1.5-2 GB). Likely needs
+  one iteration pass on frozen CUDA DLL loading — run `build_nvidia.ps1` then
+  confirm a transcribe uses the GPU on a clean machine.
+- **AMD / Intel (DirectML)** — recommend **pip-on-demand**, NOT a bundle. The
+  DirectML path drags in torch + transformers + optimum (multi-GB); the
+  wizard's "install backend deps" step (bootstrap/install.py) is the better
+  delivery for those users than a 500 MB+ installer.
 
 ## Build the CPU installer
 ```powershell
@@ -61,5 +69,7 @@ Inno Setup, then the NVIDIA/AMD vendor flavors.
   directly as the rootless top-level script raised "attempted relative import
   with no known parent package"). The frozen equivalent of `python -m slumbr`.
 - `slumbr-cpu.spec` — PyInstaller spec (CPU-only excludes).
-- `build_cpu.ps1` — clean-venv build + optional Inno compile.
-- `slumbr.iss` — Inno Setup installer script.
+- `build_cpu.ps1` — clean-venv build + Inno compile → `slumbr-setup-cpu.exe`.
+- `slumbr-nvidia.spec` — PyInstaller spec (CUDA included, DirectML/torch out).
+- `build_nvidia.ps1` — build the NVIDIA flavor → `slumbr-setup-nvidia.exe`.
+- `slumbr.iss` — Inno Setup installer script (flavor via `/DFlavor=…`).

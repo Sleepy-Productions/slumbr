@@ -199,8 +199,14 @@ _install_crash_capture()
 def _add_nvidia_dll_dirs() -> None:
     if sys.platform != "win32":
         return
-    nvidia_root = Path(sys.prefix) / "Lib" / "site-packages" / "nvidia"
-    if not nvidia_root.is_dir():
+    # Dev: nvidia wheels live under the venv site-packages. Frozen (PyInstaller
+    # NVIDIA build): PyInstaller drops them next to the bundle in _MEIPASS.
+    candidates = [Path(sys.prefix) / "Lib" / "site-packages" / "nvidia"]
+    meipass = getattr(sys, "_MEIPASS", None)
+    if meipass:
+        candidates.append(Path(meipass) / "nvidia")
+    nvidia_root = next((c for c in candidates if c.is_dir()), None)
+    if nvidia_root is None:
         return
     # CTranslate2's binding uses bare LoadLibrary, which honors PATH but not
     # add_dll_directory. We do both — PATH is the load-bearing one, but
