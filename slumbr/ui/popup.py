@@ -176,6 +176,10 @@ class _Visualizer(QWidget):
     # When real audio level exceeds this, ripple fades out and lets
     # the real bars take over. Below this, ripple shows through.
     IDLE_CUTOFF = 0.12
+    # Peak-hold: each bar's recent max lingers as a bright sliver, then sinks at
+    # this per-tick decay — the classic VU "bounce" that makes the meter read as
+    # reacting to *how loud* you are, not just on/off.
+    PEAK_DECAY = 0.90
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -185,6 +189,7 @@ class _Visualizer(QWidget):
         )
         self._levels = np.zeros(self.BAR_COUNT, dtype=np.float32)
         self._targets = np.zeros(self.BAR_COUNT, dtype=np.float32)
+        self._peaks = np.zeros(self.BAR_COUNT, dtype=np.float32)
         self._active = False
         self._t0 = 0.0  # monotonic time when ripple started
         self._color = VIOLET_PRIMARY  # accent — overridden via set_color()
@@ -246,9 +251,13 @@ class _Visualizer(QWidget):
                 # always win; ripple only shows where real is quiet.
                 self._levels = np.maximum(self._levels, ripple * fade)
 
+        # Peak-hold caps: rise instantly to the live level, decay slowly.
+        self._peaks = np.maximum(self._peaks * self.PEAK_DECAY, self._levels)
+
         if not self._active and float(self._levels.max()) < 0.005:
             self._timer.stop()
             self._levels = np.zeros(self.BAR_COUNT, dtype=np.float32)
+            self._peaks = np.zeros(self.BAR_COUNT, dtype=np.float32)
         self.update()
 
     def paintEvent(self, _event) -> None:  # noqa: N802
@@ -261,22 +270,26 @@ class _Visualizer(QWidget):
         cy = h // 2
         max_half = (h - 4) // 2
 
+        p.setPen(Qt.NoPen)
         for i in range(self.BAR_COUNT):
             level = float(self._levels[i])
+            bx = x + i * (self.BAR_WIDTH + self.BAR_GAP)
             bar_h = max(2, int(level * 2 * max_half))
             y = cy - bar_h // 2
+            # Wider dynamic range: quiet bars sit dim, loud bars punch bright.
             color = QColor(self._color)
-            color.setAlpha(int(170 + 80 * level))
-            p.setPen(Qt.NoPen)
+            color.setAlpha(max(0, min(255, int(70 + 170 * level))))
             p.setBrush(color)
-            p.drawRoundedRect(
-                x + i * (self.BAR_WIDTH + self.BAR_GAP),
-                y,
-                self.BAR_WIDTH,
-                bar_h,
-                1.5,
-                1.5,
-            )
+            p.drawRoundedRect(bx, y, self.BAR_WIDTH, bar_h, 1.5, 1.5)
+
+            # Peak-hold cap: a bright sliver at the recent max that bounces down.
+            peak = float(self._peaks[i])
+            if peak > level + 0.02:
+                cap_h = max(2, int(peak * 2 * max_half))
+                cap = QColor(self._color)
+                cap.setAlpha(225)
+                p.setBrush(cap)
+                p.drawRoundedRect(bx, cy - cap_h // 2, self.BAR_WIDTH, 2, 1.0, 1.0)
 
 
 class _PartialTextRenderer(QWidget):
