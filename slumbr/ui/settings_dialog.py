@@ -230,8 +230,8 @@ class SettingsDialog(QDialog):
         if app_icon is not None:
             self.setWindowIcon(app_icon)
         self.setStyleSheet(_dialog_qss(*derive_accent(config.accent_color)))
-        self.setMinimumSize(820, 620)
-        self.resize(960, 720)
+        self.setMinimumSize(900, 680)
+        self.resize(1080, 800)
         # Modeless — the tray hotkey + popup keep working while the
         # dialog is open. setModal(False) is default but explicit.
         self.setModal(False)
