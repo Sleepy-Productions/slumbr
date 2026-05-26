@@ -57,6 +57,17 @@ def main() -> int:
 
     set_process_app_id()
     _install_crash_excepthook()
+
+    # Single-instance: if Slumbr is already running, surface it and exit instead
+    # of starting a second copy (which would double the Caps Lock hook + leave a
+    # stray taskbar button + make every relaunch look like a "crash").
+    from .session_logs import another_instance_running, focus_existing
+
+    if another_instance_running():
+        log.info("Slumbr is already running — focusing it instead of starting a second copy")
+        focus_existing()
+        return 0
+
     log.info("Slumbr %s — tap Caps Lock to dictate", __version__)
     return SlumbrApp().run()
 
