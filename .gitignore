@@ -47,3 +47,10 @@ htmlcov/
 # Claude Code local settings (per-machine, not project-wide)
 .claude/
 CLAUDE.md
+
+# Packaging build artifacts
+build/
+dist/
+.venv-cpu/
+packaging/dist-installer/
+*.spec.bak
