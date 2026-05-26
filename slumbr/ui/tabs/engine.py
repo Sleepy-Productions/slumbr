@@ -149,6 +149,8 @@ class EngineTab(QWidget):
         super().__init__()
         self._config = config
         self._accent = config.accent_color  # tier-card chips/checks/active border
+        self._hw_chips: list[QLabel] = []   # GPU/CPU row labels, restyled on accent change
+        self._notice_dot: QLabel | None = None
         if self._config.backend is None:
             self._config.backend = BackendConfig(
                 name="moonshine", model="moonshine-base-en-int8", threads=4
@@ -215,7 +217,8 @@ class EngineTab(QWidget):
         notice_l = QHBoxLayout(notice)
         notice_l.setContentsMargins(14, 12, 14, 12)
         dot = QLabel("●")
-        dot.setStyleSheet(f"color: {VIOLET_PRIMARY}; font-size: 16px;")
+        dot.setStyleSheet(f"color: {self._accent}; font-size: 16px;")
+        self._notice_dot = dot
         msg = QLabel(
             "Engine / model changes apply on the next Slumbr launch. "
             "Hit Restart (in the tray menu or the About tab) to apply them now."
@@ -253,7 +256,8 @@ class EngineTab(QWidget):
 
         chip = QLabel(dim)
         chip.setFixedWidth(38)
-        chip.setStyleSheet(f"color: {VIOLET_PRIMARY}; font-weight: 700; font-size: 10pt;")
+        chip.setStyleSheet(f"color: {self._accent}; font-weight: 700; font-size: 10pt;")
+        self._hw_chips.append(chip)
         lay.addWidget(chip)
 
         val = QLabel(value)
@@ -282,9 +286,14 @@ class EngineTab(QWidget):
                 w.deleteLater()
 
     def reflect_accent(self, primary: str) -> None:
-        """Recolor the tier cards (chips, checks, active border) when the user
-        picks a new accent — rebuilds the rows so every card gets it."""
+        """Recolor the tier cards (chips, checks, active border), the GPU/CPU
+        detected-hardware rows, and the restart-notice dot when the user picks
+        a new accent."""
         self._accent = primary
+        for chip in self._hw_chips:
+            chip.setStyleSheet(f"color: {primary}; font-weight: 700; font-size: 10pt;")
+        if self._notice_dot is not None:
+            self._notice_dot.setStyleSheet(f"color: {primary}; font-size: 16px;")
         self._populate_backend_row()
         self._rebuild_model_row()
         self._rebuild_compute_row()

@@ -28,23 +28,15 @@ from PIL import Image, ImageDraw
 from .. import history
 from ..config import SlumbrConfig
 from ..state import State
-from ..theme import (
-    COLOR_IDLE,
-    COLOR_PASTING,
-    COLOR_RECORDING,
-    COLOR_TRANSCRIBING,
-)
+from ..theme import derive_accent
 
 log = logging.getLogger(__name__)
 
 _ICON_SIZE = 64
 
-_STATE_COLORS: dict[State, str] = {
-    State.IDLE: COLOR_IDLE,
-    State.RECORDING: COLOR_RECORDING,
-    State.TRANSCRIBING: COLOR_TRANSCRIBING,
-    State.PASTING: COLOR_PASTING,
-}
+# States that use the darker accent shade (mid-work); the rest use the
+# accent itself, so the tray dot is always the user's chosen color.
+_DEEP_STATES = frozenset({State.TRANSCRIBING, State.PASTING})
 
 _LAST_TRANSCRIPT_MAX = 60
 
@@ -97,6 +89,11 @@ class SlumbrTray:
         self._icon: pystray.Icon | None = None
         self._state = State.IDLE
         self._hotkey_label = hotkey_label
+        self._accent = config.accent_color  # tray dot = the user's color
+
+    def _state_color(self, state: State) -> str:
+        primary, _hover, deep, _pill = derive_accent(self._accent)
+        return deep if state in _DEEP_STATES else primary
 
     def set_hotkey_label(self, label: str) -> None:
         self._hotkey_label = label
@@ -167,7 +164,7 @@ class SlumbrTray:
             return
         self._icon = pystray.Icon(
             "slumbr",
-            icon=_icon_image(_STATE_COLORS[State.IDLE]),
+            icon=_icon_image(self._state_color(State.IDLE)),
             title=self._title_for_state(State.IDLE),
             menu=self._build_menu(),
         )
@@ -178,8 +175,14 @@ class SlumbrTray:
         self._state = state
         if self._icon is None:
             return
-        self._icon.icon = _icon_image(_STATE_COLORS[state])
+        self._icon.icon = _icon_image(self._state_color(state))
         self._icon.title = self._title_for_state(state)
+
+    def set_accent(self, color: str) -> None:
+        """Recolor the tray icon to the user's accent (live)."""
+        self._accent = color
+        if self._icon is not None:
+            self._icon.icon = _icon_image(self._state_color(self._state))
 
     def notify(self, message: str, title: str = "Slumbr") -> None:
         """Show a system-tray notification (Windows balloon). Best-effort:

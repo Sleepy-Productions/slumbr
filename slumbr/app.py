@@ -463,6 +463,7 @@ class SlumbrApp:
         self.popup.set_compact(self.config.compact_popup)
         self.popup.set_follow_cursor(self.config.popup_follow_cursor)
         self.popup.set_accent(self.config.accent_color)
+        self.tray.set_accent(self.config.accent_color)
         # Refresh the tray menu so quick-toggle checkmarks reflect new state.
         self.tray.refresh_menu()
 

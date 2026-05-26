@@ -42,7 +42,6 @@ from ...theme import (
     BORDER,
     TEXT_PRIMARY,
     TEXT_SECONDARY,
-    VIOLET_PRIMARY,
 )
 from ._widgets import field_hint, field_label, heading, scrollable, subheading
 
@@ -53,6 +52,7 @@ class BehaviorTab(QWidget):
     def __init__(self, config: SlumbrConfig) -> None:
         super().__init__()
         self._config = config
+        self._status_dot: QLabel | None = None  # accent-colored when a cable is found
 
         body = QWidget()
         layout = QVBoxLayout(body)
@@ -190,7 +190,8 @@ class BehaviorTab(QWidget):
         status_row.setSpacing(8)
         status_dot = QLabel("●")
         if self._cables:
-            status_dot.setStyleSheet(f"color: {VIOLET_PRIMARY}; font-size: 14px;")
+            status_dot.setStyleSheet(f"color: {self._config.accent_color}; font-size: 14px;")
+            self._status_dot = status_dot
             status_text = QLabel(
                 f"Detected {len(self._cables)} usable virtual cable"
                 + ("s" if len(self._cables) > 1 else "")
@@ -327,6 +328,11 @@ class BehaviorTab(QWidget):
             self._config.accent_color = chosen.name()
             self._refresh_swatch()
             self.config_changed.emit()
+
+    def reflect_accent(self, primary: str) -> None:
+        """Recolor the virtual-cable status dot to the accent (when shown)."""
+        if self._status_dot is not None:
+            self._status_dot.setStyleSheet(f"color: {primary}; font-size: 14px;")
 
 
 class _CaptureKeyButton(QPushButton):
