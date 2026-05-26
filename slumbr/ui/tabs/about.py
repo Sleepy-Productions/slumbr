@@ -9,7 +9,7 @@ from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWi
 from ... import __version__
 from ...branding import LOGO_COLOR
 from ...config import SlumbrConfig
-from ...theme import TEXT_PRIMARY, TEXT_SECONDARY, VIOLET_PRIMARY
+from ...theme import FONT_DISPLAY, TEXT_PRIMARY, TEXT_SECONDARY, VIOLET_PRIMARY
 from ._widgets import glyph_pixmap, heading, scrollable, tag
 
 _REPO_URL = "https://github.com/SIeepyDev/slumbr"
@@ -51,7 +51,7 @@ class AboutTab(QWidget):
 
         self._brand = QLabel("Sleepy Productions")
         self._brand.setStyleSheet(f"color: {VIOLET_PRIMARY}; font-weight: 700;")
-        bf = QFont()
+        bf = QFont(FONT_DISPLAY)
         bf.setPointSize(15)
         self._brand.setFont(bf)
         namecol.addWidget(self._brand)

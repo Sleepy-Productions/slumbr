@@ -37,6 +37,7 @@ from ...input.keymap import vk_label
 from ...theme import (
     BG_PANEL,
     BORDER,
+    FONT_DISPLAY,
     RADIUS_MD,
     TEXT_PRIMARY,
     TEXT_SECONDARY,
@@ -339,6 +340,7 @@ class _VBCableInstallDialog(QDialog):
 
         title = QLabel("Installing VB-Cable…")
         tf = title.font()
+        tf.setFamily(FONT_DISPLAY)
         tf.setPointSize(15)
         tf.setBold(True)
         title.setFont(tf)
