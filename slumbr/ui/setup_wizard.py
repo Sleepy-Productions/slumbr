@@ -45,6 +45,11 @@ from ..theme import (
     BG_PANEL,
     BG_PANEL_HI,
     BORDER,
+    FONT_BODY,
+    FONT_DISPLAY,
+    RADIUS_CARD,
+    RADIUS_MD,
+    TEXT_DISABLED,
     TEXT_PRIMARY,
     TEXT_SECONDARY,
     VIOLET_DEEP,
@@ -59,43 +64,53 @@ log = logging.getLogger(__name__)
 def _wizard_qss() -> str:
     return f"""
     QDialog {{ background-color: {BG_DARK}; }}
-    QWidget {{ color: {TEXT_PRIMARY}; font-family: "Segoe UI"; }}
+    QWidget {{ color: {TEXT_PRIMARY}; font-family: "{FONT_BODY}", "Segoe UI"; }}
     QLabel {{ color: {TEXT_PRIMARY}; }}
 
     QFrame#card {{
         background-color: {BG_PANEL};
         border: 1px solid {BORDER};
-        border-radius: 14px;
+        border-radius: {RADIUS_CARD}px;
     }}
 
     QPushButton {{
         background-color: {BG_PANEL_HI};
         color: {TEXT_PRIMARY};
         border: 1px solid {BORDER};
-        border-radius: 10px;
-        padding: 10px 22px;
+        border-radius: {RADIUS_MD}px;
+        padding: 8px 20px;
         font-weight: 500;
     }}
     QPushButton:hover {{ border: 1px solid {VIOLET_PRIMARY}; }}
     QPushButton:pressed {{ background-color: {VIOLET_DEEP}; }}
     QPushButton:focus {{ border: 1px solid {VIOLET_PRIMARY}; outline: none; }}
+    QPushButton:disabled {{
+        background-color: {BG_PANEL};
+        color: {TEXT_DISABLED};
+        border: 1px solid {BORDER};
+    }}
     QPushButton#primary {{
         background-color: {VIOLET_PRIMARY};
         color: #0A0A0B;
         border: 1px solid {VIOLET_PRIMARY};
         font-weight: 700;
-        padding: 12px 26px;
+        padding: 12px 24px;
     }}
     QPushButton#primary:hover {{
         background-color: {VIOLET_PRIMARY_HOVER};
         border: 1px solid {VIOLET_PRIMARY_HOVER};
     }}
+    QPushButton#primary:disabled {{
+        background-color: {BG_PANEL_HI};
+        color: {TEXT_DISABLED};
+        border: 1px solid {BORDER};
+    }}
 
     QComboBox {{
         background-color: {BG_PANEL_HI};
         border: 1px solid {BORDER};
-        border-radius: 10px;
-        padding: 10px 14px;
+        border-radius: {RADIUS_MD}px;
+        padding: 8px 12px;
         min-height: 24px;
     }}
     QComboBox:hover, QComboBox:focus {{ border: 1px solid {VIOLET_PRIMARY}; }}
@@ -104,9 +119,9 @@ def _wizard_qss() -> str:
         color: {TEXT_PRIMARY};
         border: 1px solid {BORDER};
         selection-background-color: {VIOLET_PRIMARY};
-        selection-color: {TEXT_PRIMARY};
+        selection-color: #0A0A0B;
         outline: 0;
-        padding: 6px;
+        padding: 8px;
     }}
     """
 
@@ -167,7 +182,7 @@ class SetupWizard(QDialog):
 
         # Brand strip
         brand = QLabel("Slumbr")
-        bf = QFont()
+        bf = QFont(FONT_DISPLAY)
         bf.setPointSize(20)
         bf.setBold(True)
         brand.setFont(bf)
@@ -223,7 +238,7 @@ class SetupWizard(QDialog):
         layout.setSpacing(18)
 
         title = QLabel("Welcome to Slumbr")
-        tf = QFont()
+        tf = QFont(FONT_DISPLAY)
         tf.setPointSize(28)
         tf.setBold(True)
         title.setFont(tf)
@@ -250,7 +265,7 @@ class SetupWizard(QDialog):
         layout.setSpacing(18)
 
         title = QLabel("Looking at your hardware…")
-        tf = QFont()
+        tf = QFont(FONT_DISPLAY)
         tf.setPointSize(22)
         tf.setBold(True)
         title.setFont(tf)
@@ -282,7 +297,7 @@ class SetupWizard(QDialog):
         layout.setSpacing(18)
 
         title = QLabel("Recommended setup")
-        tf = QFont()
+        tf = QFont(FONT_DISPLAY)
         tf.setPointSize(22)
         tf.setBold(True)
         title.setFont(tf)
@@ -298,7 +313,7 @@ class SetupWizard(QDialog):
         cl.setSpacing(10)
 
         self._rec_backend_label = QLabel("…")
-        bf = QFont()
+        bf = QFont(FONT_DISPLAY)
         bf.setPointSize(15)
         bf.setBold(True)
         self._rec_backend_label.setFont(bf)
@@ -339,7 +354,7 @@ class SetupWizard(QDialog):
         layout.setSpacing(14)
 
         self._install_title = QLabel("Installing backend…")
-        tf = QFont()
+        tf = QFont(FONT_DISPLAY)
         tf.setPointSize(22)
         tf.setBold(True)
         self._install_title.setFont(tf)
@@ -371,7 +386,7 @@ class SetupWizard(QDialog):
         layout.setSpacing(18)
 
         title = QLabel("All set")
-        tf = QFont()
+        tf = QFont(FONT_DISPLAY)
         tf.setPointSize(28)
         tf.setBold(True)
         title.setFont(tf)
