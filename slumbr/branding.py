@@ -38,12 +38,14 @@ def colorized_glyph(accent_hex: str, size: int = 256) -> Image.Image:
     t = arr.max(axis=2) / 255.0
     alpha = np.clip(t * 1.35, 0.0, 1.0)
     accent = np.array(_hex_rgb(accent_hex), dtype=np.float32)
-    # Only the hottest core lifts toward white, for a glowing-filament look;
-    # everything else is the accent scaled by brightness.
-    highlight = np.clip((t - 0.55) / 0.45, 0.0, 1.0) ** 2
-    base = accent[None, None, :] * np.clip(t * 1.25, 0.0, 1.0)[..., None]
+    # The ring must read as the ACCENT color. The master ring is bright almost
+    # everywhere, so any sizeable white lift washes the whole thing white — keep
+    # it the accent and add only a faint sheen on the very brightest sliver for
+    # a hint of glow.
+    sheen = np.clip((t - 0.9) / 0.1, 0.0, 1.0) * 0.22
+    base = accent[None, None, :] * np.clip(t * 1.3, 0.0, 1.0)[..., None]
     white = np.array([255.0, 255.0, 255.0])
-    rgb = base * (1.0 - highlight[..., None]) + white * highlight[..., None]
+    rgb = base * (1.0 - sheen[..., None]) + white * sheen[..., None]
     out = np.dstack([rgb, alpha * 255.0]).clip(0, 255).astype("uint8")
     img = Image.fromarray(out, "RGBA")
     # Crop to the ring (drop the transparent margin) so it fills the canvas.
