@@ -523,17 +523,18 @@ class RecordingPopup(QWidget):
         # Smooth resize animation state. The popup eases between compact
         # and expanded shapes over `_RESIZE_DURATION_S` with an ease-out
         # cubic, so first-text and end-of-utterance feel like the popup
-        # is breathing rather than snapping. Bottom-anchored: the bottom
-        # edge stays put while the popup grows upward, which keeps the
-        # text caret region clear and matches how the popup is anchored
-        # relative to the cursor.
+        # is breathing rather than snapping. Top-anchored: the TOP edge
+        # stays put while the popup grows DOWNWARD (dropdown feel), so
+        # streaming text flows top→bottom the way you read it. The popup
+        # is anchored below the cursor (see _reposition) so growing down
+        # stays clear of what the user is reading above.
         self._resize_timer = QTimer(self)
         self._resize_timer.setInterval(16)
         self._resize_timer.timeout.connect(self._resize_tick)
         self._resize_t0 = 0.0
         self._resize_from: tuple[int, int] = (_POPUP_W, _POPUP_H)
         self._resize_to: tuple[int, int] = (_POPUP_W, _POPUP_H)
-        self._resize_bottom_y: int = 0  # screen-space y of bottom edge
+        self._resize_top_y: int = 0  # screen-space y of the pinned top edge
 
         self._dot = _StatusDot(self)
 
@@ -587,10 +588,11 @@ class RecordingPopup(QWidget):
         if screen is None:
             return
         geo = screen.availableGeometry()
-        # Anchor above-right of cursor — close enough to see, off the typing
-        # caret so it doesn't cover what the user is about to read/type.
+        # Anchor below-right of the cursor so the popup can open DOWNWARD
+        # (dropdown-style) as live text streams in — see _resize_tick. Sits
+        # below the caret so the growth doesn't cover what's above it.
         x = cursor_pos.x() + 16
-        y = cursor_pos.y() - self.height() - 16
+        y = cursor_pos.y() + 24
         # Clamp to screen bounds.
         x = max(geo.x() + 8, min(x, geo.x() + geo.width() - self.width() - 8))
         y = max(geo.y() + 8, min(y, geo.y() + geo.height() - self.height() - 8))
@@ -751,11 +753,12 @@ class RecordingPopup(QWidget):
             self.setFixedSize(target_w, target_h)
 
     def _animate_resize_to(self, target_w: int, target_h: int) -> None:
-        """Smoothly resize the popup, keeping the bottom edge anchored.
+        """Smoothly resize the popup, keeping the TOP edge anchored.
 
-        Bottom-anchoring means the popup grows upward as it expands
-        (because the cursor is below the popup), avoiding the visual of
-        the popup creeping down into the typing region.
+        Top-anchoring means the popup grows downward as it expands — a
+        dropdown opening, matching how the eye reads streaming text. The
+        popup is anchored below the cursor so this growth stays clear of
+        what the user is reading above it.
         """
         if (self.width(), self.height()) == (target_w, target_h):
             return
@@ -764,7 +767,7 @@ class RecordingPopup(QWidget):
         self.setMaximumSize(16777215, 16777215)
         self._resize_from = (self.width(), self.height())
         self._resize_to = (target_w, target_h)
-        self._resize_bottom_y = self.y() + self.height()
+        self._resize_top_y = self.y()
         self._resize_t0 = time.monotonic()
         if not self._resize_timer.isActive():
             self._resize_timer.start()
@@ -779,10 +782,9 @@ class RecordingPopup(QWidget):
         cur_w = int(fw + (tw - fw) * eased)
         cur_h = int(fh + (th - fh) * eased)
         self.resize(cur_w, cur_h)
-        # Re-anchor bottom edge so the top grows upward, not the bottom
-        # creeping into the typing region.
-        self.move(self.x(), self._resize_bottom_y - cur_h)
+        # Pin the top edge so the popup grows downward (dropdown), not up.
+        self.move(self.x(), self._resize_top_y)
         if t >= 1.0:
             self._resize_timer.stop()
             self.setFixedSize(tw, th)
-            self.move(self.x(), self._resize_bottom_y - th)
+            self.move(self.x(), self._resize_top_y)
