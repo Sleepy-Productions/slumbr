@@ -81,6 +81,7 @@ def _wizard_qss() -> str:
     QPushButton:focus {{ border: 1px solid {VIOLET_PRIMARY}; outline: none; }}
     QPushButton#primary {{
         background-color: {VIOLET_PRIMARY};
+        color: #0A0A0B;
         border: 1px solid {VIOLET_PRIMARY};
         font-weight: 700;
         padding: 12px 26px;

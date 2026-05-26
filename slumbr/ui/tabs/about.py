@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QFont
+from PySide6.QtCore import Qt, QUrl, Signal
+from PySide6.QtGui import QDesktopServices, QFont
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
 from ... import __version__
@@ -83,15 +83,19 @@ class AboutTab(QWidget):
         layout.addLayout(chips)
 
         # ===== Repo link =====
-        self._link = QLabel(
-            f'<a href="{_REPO_URL}" style="color: {VIOLET_PRIMARY};">{_REPO_URL}</a>'
-        )
+        # A real <a> link forces Qt's palette Link color (a tan/blue that
+        # ignores inline + palette overrides under a dialog stylesheet), which
+        # breaks the monochrome look. So render plain WHITE underlined text and
+        # open the URL on click ourselves.
+        self._link = QLabel(_REPO_URL)
+        self._link.setTextFormat(Qt.PlainText)  # stop Qt auto-linkifying the URL (tan link color)
         lf = QFont()
         lf.setPointSize(11)
+        lf.setUnderline(True)
         self._link.setFont(lf)
-        self._link.setOpenExternalLinks(True)
-        self._link.setTextInteractionFlags(Qt.TextBrowserInteraction)
-        self._link.setStyleSheet("padding-top: 10px;")
+        self._link.setStyleSheet(f"color: {TEXT_PRIMARY}; padding-top: 10px;")
+        self._link.setCursor(Qt.PointingHandCursor)
+        self._link.mousePressEvent = lambda _e: QDesktopServices.openUrl(QUrl(_REPO_URL))
         layout.addWidget(self._link)
 
         layout.addSpacing(24)
@@ -144,9 +148,8 @@ class AboutTab(QWidget):
             pass
 
     def reflect_accent(self, primary: str) -> None:
-        """Recolor the brand text + repo link to the accent. The logo stays a
-        fixed monochrome mark — it's the brand symbol, not an accent surface."""
+        """Recolor the brand text to the accent. The logo stays a fixed
+        monochrome mark, and the repo link stays plain white text (set in
+        __init__) — recoloring it to the accent re-introduced an <a> link whose
+        color Qt overrides to a tan palette link, breaking the monochrome look."""
         self._brand.setStyleSheet(f"color: {primary}; font-weight: 700;")
-        self._link.setText(
-            f'<a href="{_REPO_URL}" style="color: {primary};">{_REPO_URL}</a>'
-        )
