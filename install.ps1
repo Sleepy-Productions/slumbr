@@ -34,6 +34,7 @@ $ROOT       = $PSScriptRoot
 $VENV       = Join-Path $ROOT '.venv'
 $VENV_PY    = Join-Path $VENV 'Scripts\python.exe'
 $VENV_PYW   = Join-Path $VENV 'Scripts\pythonw.exe'
+$VENV_SLUMBR= Join-Path $VENV 'Scripts\Slumbr.exe'
 $ICON_PATH  = Join-Path $ROOT 'slumbr\assets\icon.ico'
 
 function Write-Step($msg) { Write-Host "==> $msg" -ForegroundColor Cyan }
@@ -158,6 +159,16 @@ Write-Step "Building icon"
 if ($LASTEXITCODE -ne 0) { Fail "icon build failed" }
 if (-not (Test-Path $ICON_PATH)) { Fail "icon build reported success but $ICON_PATH is missing" }
 
+# ----------------------------------------------------------------- launcher
+# Copy pythonw.exe -> Slumbr.exe so the RUNNING process is "Slumbr.exe", not the
+# host "pythonw.exe". That process name is what the taskbar button shows and what
+# pinning latches onto — the AUMID only fixes grouping, this fixes the identity
+# so it never reads as "Python". (Python doesn't care about its exe filename.)
+Write-Step "Creating Slumbr.exe launcher (so it runs + pins as Slumbr, not Python)"
+Copy-Item $VENV_PYW $VENV_SLUMBR -Force
+if (Test-Path $VENV_SLUMBR) { Write-Ok "Slumbr.exe ready" }
+else { Write-Warn2 "couldn't create Slumbr.exe — the shortcut will fall back to pythonw.exe" }
+
 # ----------------------------------------------------------------- shortcut
 if ($NoShortcut) {
     Write-Warn2 "Skipping desktop shortcut (you passed -NoShortcut)"
@@ -175,7 +186,7 @@ Write-Host "Slumbr is installed." -ForegroundColor Green
 Write-Host ""
 Write-Host "Launch options:"
 Write-Host "  - Double-click the 'Slumbr' shortcut on your desktop (no console window)"
-Write-Host "  - From this folder:  .\.venv\Scripts\pythonw.exe -m slumbr"
+Write-Host "  - From this folder:  .\.venv\Scripts\Slumbr.exe -m slumbr"
 Write-Host "  - With logs:         .\.venv\Scripts\python.exe -m slumbr --debug"
 Write-Host ""
 if ($Backend) {
