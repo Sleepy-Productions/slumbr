@@ -42,8 +42,8 @@ class VoiceTab(QWidget):
 
         body = QWidget()
         layout = QVBoxLayout(body)
-        layout.setContentsMargins(56, 48, 56, 48)
-        layout.setSpacing(22)
+        layout.setContentsMargins(48, 40, 48, 40)
+        layout.setSpacing(20)
 
         layout.addWidget(heading("Voice", size=28))
         layout.addWidget(

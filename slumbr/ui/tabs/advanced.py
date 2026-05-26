@@ -51,8 +51,8 @@ class AdvancedTab(QWidget):
 
         body = QWidget()
         layout = QVBoxLayout(body)
-        layout.setContentsMargins(40, 28, 40, 28)
-        layout.setSpacing(16)
+        layout.setContentsMargins(48, 40, 48, 40)
+        layout.setSpacing(20)
 
         layout.addWidget(heading("Advanced", size=28))
         layout.addWidget(

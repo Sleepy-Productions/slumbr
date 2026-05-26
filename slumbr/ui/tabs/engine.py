@@ -170,8 +170,8 @@ class EngineTab(QWidget):
 
         body = QWidget()
         layout = QVBoxLayout(body)
-        layout.setContentsMargins(56, 44, 56, 44)
-        layout.setSpacing(14)
+        layout.setContentsMargins(48, 40, 48, 40)
+        layout.setSpacing(20)
 
         layout.addWidget(heading("Engine", size=28))
         layout.addWidget(

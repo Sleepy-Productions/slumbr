@@ -43,7 +43,7 @@ class ShortcutsTab(QWidget):
         super().__init__()
         body = QWidget()
         layout = QVBoxLayout(body)
-        layout.setContentsMargins(56, 48, 56, 48)
+        layout.setContentsMargins(48, 40, 48, 40)
         layout.setSpacing(20)
 
         layout.addWidget(heading("Shortcuts", size=28))
