@@ -29,24 +29,25 @@ def _hex_to_rgb(s: str) -> tuple[int, int, int]:
 
 
 def _render(size: int) -> Image.Image:
-    """A clean accent dot on a fully transparent canvas — no plate.
+    """One solid accent circle on a fully transparent canvas — nothing else.
 
-    The earlier design painted a near-black rounded-square plate behind the
-    dot, which read as "a square around the circle" in the taskbar / alt-tab.
-    Drawing only circles on transparency means the corners stay cut out, so
-    the shell icon matches the tray dot exactly. Same geometry as
-    ``tray._icon_image``: a faint full-canvas halo + a bold inner dot.
+    History: the original drew a near-black rounded-square plate behind the
+    dot (read as "a square around the circle"). The first fix swapped that for
+    a translucent halo + inner dot — but over a dark taskbar the halo renders
+    as a dim ring that *still* frames the dot like a backing plate. So: no
+    plate, no halo. Just the oval, cut out clean, corners fully transparent.
     """
-    img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    d = ImageDraw.Draw(img)
+    # PIL's ellipse draws a hard, aliased rim. Supersample 4× and downscale
+    # with LANCZOS so the circle's edge is smooth at every embedded size.
+    ss = 4
+    big = Image.new("RGBA", (size * ss, size * ss), (0, 0, 0, 0))
+    d = ImageDraw.Draw(big)
     accent = _hex_to_rgb(VIOLET_PRIMARY) + (255,)
-    halo = _hex_to_rgb(VIOLET_PRIMARY) + (70,)
-    # Soft halo fills the canvas as a circle — corners stay transparent.
-    d.ellipse((0, 0, size - 1, size - 1), fill=halo)
-    # Bold inner dot.
-    inset = max(1, round(size * 0.14))
-    d.ellipse((inset, inset, size - 1 - inset, size - 1 - inset), fill=accent)
-    return img
+    # A small inset keeps the circle off the very edge without reading as
+    # padding.
+    inset = max(0, round(size * ss * 0.06))
+    d.ellipse((inset, inset, size * ss - 1 - inset, size * ss - 1 - inset), fill=accent)
+    return big.resize((size, size), Image.LANCZOS)
 
 
 def main() -> None:
