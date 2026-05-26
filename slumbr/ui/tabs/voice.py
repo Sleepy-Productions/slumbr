@@ -1,19 +1,15 @@
-"""Voice tab — input device, language, vocabulary hint.
+"""Voice tab — input device + language.
 
-These are the *hot-tunable* knobs that apply mid-session without an
-engine reload. Engine / model selection moved to the Engine tab.
+The two knobs almost everyone touches, applied mid-session without an engine
+reload. Engine / model selection lives in the Engine tab; vocabulary hints,
+auto-corrections, and trailing-filler stripping moved to the Advanced tab.
 """
 
 from __future__ import annotations
 
 import sounddevice as sd
 from PySide6.QtCore import Signal
-from PySide6.QtWidgets import (
-    QCheckBox,
-    QPlainTextEdit,
-    QVBoxLayout,
-    QWidget,
-)
+from PySide6.QtWidgets import QVBoxLayout, QWidget
 
 from ...config import SlumbrConfig
 from ._widgets import (
@@ -37,30 +33,6 @@ def _list_input_devices() -> list[tuple[int, str]]:
     return out
 
 
-def _format_replacements(d: dict[str, str]) -> str:
-    """Render the {heard: corrected} map as editable 'heard => corrected' lines."""
-    return "\n".join(f"{k} => {v}" for k, v in d.items())
-
-
-def _parse_replacements(text: str) -> dict[str, str]:
-    """Parse 'heard => corrected' (or '->') lines back into a map. Malformed
-    lines are skipped silently so a half-typed entry never breaks the rest.
-    """
-    out: dict[str, str] = {}
-    for line in text.splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        for sep in ("=>", "->"):
-            if sep in line:
-                left, right = line.split(sep, 1)
-                left, right = left.strip(), right.strip()
-                if left and right:
-                    out[left] = right
-                break
-    return out
-
-
 class VoiceTab(QWidget):
     config_changed = Signal()
 
@@ -76,8 +48,8 @@ class VoiceTab(QWidget):
         layout.addWidget(heading("Voice", size=28))
         layout.addWidget(
             subheading(
-                "Mic, language, and vocabulary hints. These apply immediately — "
-                "no restart needed."
+                "Mic and language — applied immediately, no restart. Vocabulary "
+                "hints and auto-corrections are on the Advanced tab."
             )
         )
 
@@ -116,47 +88,6 @@ class VoiceTab(QWidget):
             )
         )
 
-        # Vocabulary hint
-        layout.addWidget(field_label("Vocabulary hint"))
-        layout.addWidget(
-            field_hint(
-                "List proper nouns, technical terms, slang — anything Slumbr "
-                "mishears. Up to ~200 tokens. Used as Whisper's initial_prompt "
-                "(Moonshine ignores this field)."
-            )
-        )
-        self._prompt_edit = QPlainTextEdit()
-        self._prompt_edit.setPlainText(config.initial_prompt)
-        self._prompt_edit.setPlaceholderText(
-            "Slumbr, Sleepy Productions, PySide6, faster-whisper, sherpa-onnx..."
-        )
-        self._prompt_edit.setFixedHeight(110)
-        self._prompt_edit.textChanged.connect(self._on_changed)
-        layout.addWidget(self._prompt_edit)
-
-        # Auto-corrections (find-replace, every backend)
-        layout.addWidget(field_label("Auto-corrections"))
-        layout.addWidget(
-            field_hint(
-                "Fix mishears Slumbr makes the same way every time. One per line, "
-                "format: heard => corrected (e.g. keybinde => keybinds). Whole-word, "
-                "case-insensitive, applied to every backend before paste."
-            )
-        )
-        self._repl_edit = QPlainTextEdit()
-        self._repl_edit.setPlainText(_format_replacements(config.word_replacements))
-        self._repl_edit.setPlaceholderText("keybinde => keybinds\nslumber => Slumbr")
-        self._repl_edit.setFixedHeight(90)
-        self._repl_edit.textChanged.connect(self._on_changed)
-        layout.addWidget(self._repl_edit)
-
-        self._strip_filler = QCheckBox(
-            "Remove trailing “thank you” / “thanks for watching” hallucinations"
-        )
-        self._strip_filler.setChecked(config.strip_trailing_filler)
-        self._strip_filler.stateChanged.connect(self._on_changed)
-        layout.addWidget(self._strip_filler)
-
         layout.addStretch(1)
 
         outer = QVBoxLayout(self)
@@ -167,7 +98,4 @@ class VoiceTab(QWidget):
         self._config.input_device_name = self._device_combo.currentData()
         lang = self._language_combo.currentData()
         self._config.language = lang if lang is not None else ""
-        self._config.initial_prompt = self._prompt_edit.toPlainText().strip()
-        self._config.word_replacements = _parse_replacements(self._repl_edit.toPlainText())
-        self._config.strip_trailing_filler = self._strip_filler.isChecked()
         self.config_changed.emit()
