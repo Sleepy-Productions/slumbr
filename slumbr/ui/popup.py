@@ -505,6 +505,11 @@ class RecordingPopup(QWidget):
         super().__init__()
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
         self.setAttribute(Qt.WA_ShowWithoutActivating)
+        # Frameless + rounded paint needs a transparent window background, or
+        # the corners outside the rounded rect render as an opaque square —
+        # the "square behind the oval." This erases that square so only the
+        # rounded pill (drawn in paintEvent) shows.
+        self.setAttribute(Qt.WA_TranslucentBackground)
         self.setFixedSize(_POPUP_W, _POPUP_H)
         # Compact mode = just the visualizer. Set via ``set_compact``
         # from app.py at startup + on config change. Affects:
