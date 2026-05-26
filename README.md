@@ -96,12 +96,10 @@ Models cache to `%APPDATA%\Slumbr\models` on first download — after that, Slum
 - **Tap-to-toggle Caps Lock hotkey.** No press-and-hold, no wake-word. The OS-level Caps Lock state is never flipped while Slumbr is running. Rebind to any key or chord in Settings → Shortcuts.
 - **Auto-paste at the cursor.** Works in Notepad, browsers, chat apps, terminals (Ctrl+Shift+V mode), and Electron IDEs like VS Code.
 - **Copy from history.** A dictation that landed with no field focused still saves to History — double-click, right-click, or Ctrl+C to copy any transcript out, or "Copy all".
-- **Mute other apps while dictating — two ways:**
-  1. **Virtual mic routing** (universal): one-click VB-Cable install + auto-config → call apps hear silence during dictation while Slumbr keeps capturing. Works in Discord / Zoom / Teams / OBS / browser calls.
-  2. **Reverse-PTT keybind** (Discord-specific): Slumbr presses a configured key during dictation; you bind it to Discord's "Push To Mute".
+- **Mute other apps while dictating.** One-click VB-Cable install + auto-config → call apps hear silence during dictation while Slumbr keeps capturing. Works in Discord / Zoom / Teams / OBS / browser calls. (Discord users can alternatively use Discord's own Push-to-Mute keybind — no cable needed.)
 - **Customizable accent.** One color recolors the whole app — audio visualizer, "✓ Sent" flash, settings UI, tray icon — live, and persists across restarts. (Neutral by default; the brand mark stays monochrome.)
 - **System tray + tabbed Settings.** No hub window — the tray is the only persistent surface. Settings stays simple (Engine · Voice · Behavior · Customization · Shortcuts · History) with an **Advanced** tab for power-user knobs.
-- **Tune everything.** Input device, language, paste method, hotkey, backend, model size, compute precision — plus vocabulary hints, auto-corrections, and reverse-PTT details under Advanced.
+- **Tune everything.** Input device, language, paste method, hotkey, backend, model size, compute precision — plus a vocabulary hint and clipboard / auto-send options under Advanced.
 
 ## Requirements
 
@@ -128,7 +126,7 @@ So your dictation doesn't get broadcast into a call. The universal path (recomme
 
 Now Caps Lock silences your mic in every call app while Slumbr keeps transcribing internally.
 
-> Prefer the Discord-only route? On the **Behavior** tab tick "Reverse PTT", set its key in **Advanced → Reverse-PTT key**, and bind that same key to Discord's "Push To Mute".
+> **Discord-only alternative (no VB-Cable):** bind a key under Discord's **User Settings → Voice & Video → Push to Mute**, and press it while you dictate. Mutes only Discord, but needs no virtual cable.
 
 ## Privacy
 
@@ -139,8 +137,8 @@ Slumbr never makes a network call at runtime. Models download once from Hugging 
 **PowerShell won't run `install.ps1`.**
 `Unblock-File .\install.ps1`, or allow local scripts once: `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`.
 
-**Paste doesn't work in VS Code's integrated terminal (or Windows Terminal).**
-Terminals reserve Ctrl+V. Settings → Behavior → Paste method → **Ctrl+Shift+V**.
+**Paste doesn't land in some app.**
+Most Windows apps — including VS Code's terminal and Windows Terminal — accept the default **Ctrl+V**. If one ignores it, switch Settings → Behavior → Paste method to **Ctrl+Shift+V**, or **Type each character** for anything that blocks clipboard paste entirely.
 
 **First utterance is slow.**
 Warm-up runs at startup; the first *real* transcription still pays a small one-time decoder cost. Subsequent utterances settle into the steady-state range.
