@@ -18,11 +18,13 @@ VIOLET_PRIMARY = "#9B6FE0"  # accent — RECORDING dot, tray-active
 VIOLET_PRIMARY_HOVER = "#AD84E8"  # filled-button hover (between primary and light)
 VIOLET_DEEP = "#7B4FC0"  # TRANSCRIBING dot, borders
 
-# Dark surfaces
-BG_DARK = "#0D0D12"  # window backgrounds
-BG_PANEL = "#16161C"  # elevated panels (popup)
-BG_PANEL_HI = "#1E1E26"  # button rest
-BORDER = "#3A3A44"  # 1px dividers
+# Dark surfaces — near-black, neutral (no blue tint), matching the SleepyDev
+# black+white house brand. Small steps between layers keep cards/borders
+# legible without the surfaces reading as "gray".
+BG_DARK = "#08080A"  # window backgrounds (near-black)
+BG_PANEL = "#101013"  # elevated panels (popup pill)
+BG_PANEL_HI = "#18181C"  # cards / button rest
+BORDER = "#2C2C32"  # 1px dividers
 TEXT_PRIMARY = "#F3EDFF"  # white-ish for body
 TEXT_SECONDARY = "#A09EB0"  # muted
 
