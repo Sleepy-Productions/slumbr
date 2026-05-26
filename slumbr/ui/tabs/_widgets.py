@@ -24,6 +24,9 @@ from ...theme import (
     BG_PANEL,
     BG_PANEL_HI,
     BORDER,
+    FONT_DISPLAY,
+    RADIUS_CARD,
+    RADIUS_PILL,
     TEXT_PRIMARY,
     TEXT_SECONDARY,
 )
@@ -61,13 +64,13 @@ def section_card(title: str) -> tuple[QFrame, QVBoxLayout]:
     card.setObjectName("sectionCard")
     card.setStyleSheet(
         f"QFrame#sectionCard {{ background: {BG_PANEL}; border: 1px solid {BORDER}; "
-        f"border-radius: 12px; }}"
+        f"border-radius: {RADIUS_CARD}px; }}"
     )
     v = QVBoxLayout(card)
-    v.setContentsMargins(20, 14, 20, 16)
-    v.setSpacing(10)
+    v.setContentsMargins(20, 16, 20, 16)
+    v.setSpacing(12)
     hdr = QLabel(title)
-    hf = QFont()
+    hf = QFont(FONT_DISPLAY)
     hf.setPointSize(12)
     hf.setBold(True)
     hdr.setFont(hf)
@@ -104,7 +107,7 @@ def keycap(text: str) -> QLabel:
     lbl.setStyleSheet(
         f"color: {TEXT_PRIMARY}; background: {BG_PANEL_HI}; "
         f"border: 1px solid {BORDER}; border-bottom: 2px solid {BORDER}; "
-        "border-radius: 6px; padding: 4px 9px;"
+        "border-radius: 6px; padding: 4px 8px;"
     )
     return lbl
 
@@ -118,7 +121,7 @@ def tag(text: str) -> QLabel:
     lbl.setFont(f)
     lbl.setStyleSheet(
         f"color: {TEXT_SECONDARY}; background: {BG_PANEL_HI}; "
-        f"border: 1px solid {BORDER}; border-radius: 11px; padding: 5px 12px;"
+        f"border: 1px solid {BORDER}; border-radius: {RADIUS_PILL}px; padding: 6px 12px;"
     )
     return lbl
 
@@ -187,7 +190,7 @@ class FlowLayout(QLayout):
 
 def heading(text: str, size: int = 22, bold: bool = True) -> QLabel:
     lbl = QLabel(text)
-    f = QFont()
+    f = QFont(FONT_DISPLAY)
     f.setPointSize(size)
     f.setBold(bold)
     lbl.setFont(f)
