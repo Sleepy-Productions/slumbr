@@ -196,6 +196,13 @@ def _install_crash_capture() -> None:
 _install_crash_capture()
 
 
+_boot_log = logging.getLogger("slumbr.bootstrap")
+
+# Populated by _add_nvidia_dll_dirs(); consumed by _preload_cuda() to find the
+# CUDA DLLs to force-load. Empty on CPU-only / non-frozen builds with no wheels.
+_NVIDIA_BIN_DIRS: list[Path] = []
+
+
 def _add_nvidia_dll_dirs() -> None:
     if sys.platform != "win32":
         return
@@ -207,6 +214,7 @@ def _add_nvidia_dll_dirs() -> None:
         candidates.append(Path(meipass) / "nvidia")
     nvidia_root = next((c for c in candidates if c.is_dir()), None)
     if nvidia_root is None:
+        _boot_log.info("no nvidia wheel dir found (CPU build?); skipping CUDA setup")
         return
     # CTranslate2's binding uses bare LoadLibrary, which honors PATH but not
     # add_dll_directory. We do both — PATH is the load-bearing one, but
@@ -217,36 +225,80 @@ def _add_nvidia_dll_dirs() -> None:
         bin_dir = nvidia_root / sub / "bin"
         if bin_dir.is_dir():
             bin_dirs.append(str(bin_dir))
+            _NVIDIA_BIN_DIRS.append(bin_dir)
             try:
                 os.add_dll_directory(str(bin_dir))
             except OSError:
                 pass
     if bin_dirs:
         os.environ["PATH"] = os.pathsep.join(bin_dirs) + os.pathsep + os.environ.get("PATH", "")
+    _boot_log.info(
+        "nvidia DLL dirs (frozen=%s, root=%s): %d bin dir(s)",
+        bool(meipass),
+        nvidia_root,
+        len(bin_dirs),
+    )
 
 
-def _preload_ctranslate2() -> None:
-    """Force CTranslate2's native module to load before anything else.
+def _preload_cuda() -> None:
+    """Force the CUDA DLLs (and CTranslate2) into the process BEFORE PySide6.
 
-    Specifically, this MUST happen before PySide6 is imported. PySide6's
-    Windows bootstrap perturbs the DLL search path in a way that breaks
-    CTranslate2's later CUDA DLL resolution: the first `WhisperModel(...)`
-    constructed after `import PySide6` crashes the process natively
-    (exit 5, no Python traceback). Importing `ctranslate2` here resolves
-    cuBLAS/cuDNN into the process up front, so by the time `slumbr.app`
-    imports PySide6, the CUDA DLLs are already mapped and immune to Qt's
-    interference.
+    PySide6's Windows bootstrap perturbs the DLL search path; the first
+    ``WhisperModel(...)`` constructed *after* ``import PySide6`` then crashes
+    the process natively (access violation / exit 5, no Python traceback).
 
-    A failed import is non-fatal — the eventual error will surface from
-    `WhisperEngine` instead, where it has user-readable context.
+    Importing the ``ctranslate2`` Python module alone is NOT enough in the
+    frozen build: ctranslate2.dll's CUDA dependencies (cuBLAS/cuDNN) are pulled
+    in lazily, so they don't actually map until WhisperModel creates the CUDA
+    context — by which point Qt has already broken the search path. So we
+    explicitly ``LoadLibrary`` the CUDA DLLs by absolute path here, pinning them
+    into the process so the later search-path change can't stop them loading.
+
+    Order matters: cublasLt before cublas (cublas links cublasLt). All
+    best-effort + logged — a failure must never stop Slumbr from starting; the
+    eventual error surfaces from WhisperEngine with user-readable context.
     """
     if sys.platform != "win32":
         return
+    import ctypes
+
+    def _find(name: str) -> Path | None:
+        for d in _NVIDIA_BIN_DIRS:
+            p = d / name
+            if p.is_file():
+                return p
+        return None
+
+    # Dependency order: cublasLt is a dependency of cublas; cudnn64_9 is the
+    # cuDNN dispatcher (its heavy sub-libs are pruned but never called).
+    for name in ("cublasLt64_12.dll", "cublas64_12.dll", "cudnn64_9.dll"):
+        path = _find(name)
+        if path is None:
+            continue
+        try:
+            ctypes.WinDLL(str(path))
+            _boot_log.info("preloaded CUDA dll %s", name)
+        except OSError as e:
+            _boot_log.warning("could not preload %s: %s", name, e)
+
     try:
         import ctranslate2  # noqa: F401
-    except Exception:  # noqa: BLE001
-        pass
+
+        # Force the CUDA runtime to initialize HERE, on the main thread, before
+        # any Qt import and before the worker thread builds the model. The
+        # frozen build access-violates if the first CUDA touch happens on the
+        # worker thread post-Qt; initializing the primary context up front (the
+        # device query is enough to load + init the CUDA runtime) sidesteps it.
+        ndev = ctranslate2.get_cuda_device_count()
+        _boot_log.info("ctranslate2 preloaded OK; cuda_device_count=%s", ndev)
+    except Exception as e:  # noqa: BLE001
+        _boot_log.warning("ctranslate2 preload failed (non-fatal): %s", e)
 
 
+_boot_log.info(
+    "bootstrap: frozen=%s, PySide6-already-imported=%s",
+    hasattr(sys, "_MEIPASS"),
+    "PySide6.QtCore" in sys.modules,
+)
 _add_nvidia_dll_dirs()
-_preload_ctranslate2()
+_preload_cuda()

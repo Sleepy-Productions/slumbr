@@ -79,6 +79,11 @@ a = Analysis(
         "torch", "torchaudio", "transformers", "optimum", "onnxruntime_directml",
         "tkinter", "matplotlib", "pandas", "scipy", "pytest", "IPython",
     ],
+    # MUST preload CTranslate2/CUDA before PyInstaller's PySide6 runtime hook
+    # imports QtCore (which otherwise breaks CUDA DLL resolution → access
+    # violation). See rthook_cuda_preload.py. (runtime_hooks resolve relative to
+    # the build CWD, not the spec dir, so anchor on SPECPATH.)
+    runtime_hooks=[os.path.join(SPECPATH, "rthook_cuda_preload.py")],
     noarchive=False,
 )
 # Drop the unused cuDNN sub-libs + NVRTC (see _PRUNE_DLLS). Runs after Analysis
