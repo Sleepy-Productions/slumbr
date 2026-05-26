@@ -97,7 +97,11 @@ class SlumbrConfig:
     input_device_name: str | None = None
     auto_send: bool = False
     preserve_clipboard: bool = True
-    accent_color: str = "#9B6FE0"  # Sleepy Productions violet
+    # Neutral default with a faint violet hint — keeps a fresh install reading
+    # clean / black-and-white. Stays mid-tone on purpose (the accent doubles as
+    # the primary-button background under light text). Users pick a vivid accent
+    # (e.g. Sleepy's #794fb5) in Settings → Customization.
+    accent_color: str = "#7E7A92"
     paste_method: str = "ctrl_v"   # "ctrl_v" | "ctrl_shift_v" | "type"
 
     # ----- Hotkey -----

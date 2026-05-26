@@ -21,6 +21,11 @@ from PIL import Image
 
 _MASTER = Path(__file__).resolve().parent / "assets" / "icon-master.png"
 
+# The brand symbol is intentionally monochrome (clean black-and-white aesthetic)
+# and FIXED — it does NOT follow the accent. The accent stays "your color" for
+# the UI (tray dot, visualizer, chrome); the logo is the brand mark.
+LOGO_COLOR = "#FFFFFF"
+
 
 def _hex_rgb(s: str) -> tuple[int, int, int]:
     s = s.lstrip("#")

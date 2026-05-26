@@ -7,6 +7,7 @@ from PySide6.QtGui import QFont
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
 from ... import __version__
+from ...branding import LOGO_COLOR
 from ...config import SlumbrConfig
 from ...theme import TEXT_PRIMARY, TEXT_SECONDARY, VIOLET_PRIMARY
 from ._widgets import glyph_pixmap, heading, scrollable, tag
@@ -33,7 +34,7 @@ class AboutTab(QWidget):
 
         self._logo = QLabel()
         self._logo.setFixedSize(_LOGO_PX, _LOGO_PX)
-        self._set_logo(config.accent_color)
+        self._set_logo(LOGO_COLOR)  # fixed monochrome brand mark, not the accent
         header.addWidget(self._logo, 0, Qt.AlignTop)
 
         namecol = QVBoxLayout()
@@ -131,11 +132,11 @@ class AboutTab(QWidget):
         outer.setContentsMargins(0, 0, 0, 0)
         outer.addWidget(scrollable(body))
 
-    def _set_logo(self, accent: str) -> None:
-        """Tint the moon-v2 brand mark to the accent (rendered 2× then scaled
-        down for crisp edges). Best-effort — never block the tab on art."""
+    def _set_logo(self, color: str) -> None:
+        """Render the moon-v2 brand mark (rendered 2× then scaled down for crisp
+        edges). Best-effort — never block the tab on art."""
         try:
-            pm = glyph_pixmap(accent, _LOGO_PX * 2).scaled(
+            pm = glyph_pixmap(color, _LOGO_PX * 2).scaled(
                 _LOGO_PX, _LOGO_PX, Qt.KeepAspectRatio, Qt.SmoothTransformation
             )
             self._logo.setPixmap(pm)
@@ -143,8 +144,8 @@ class AboutTab(QWidget):
             pass
 
     def reflect_accent(self, primary: str) -> None:
-        """Recolor the logo + brand text + repo link to the user's accent."""
-        self._set_logo(primary)
+        """Recolor the brand text + repo link to the accent. The logo stays a
+        fixed monochrome mark — it's the brand symbol, not an accent surface."""
         self._brand.setStyleSheet(f"color: {primary}; font-weight: 700;")
         self._link.setText(
             f'<a href="{_REPO_URL}" style="color: {primary};">{_REPO_URL}</a>'
