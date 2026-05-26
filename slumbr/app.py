@@ -93,6 +93,11 @@ class SlumbrApp:
         # ----- QApplication first, so the wizard can use Qt widgets.
         self.qapp = QApplication(sys.argv)
         self.qapp.setQuitOnLastWindowClosed(False)
+        # ----- Register house fonts (Inter body / Sora display) app-wide, right
+        # after QApplication exists. Defensive no-op → system font on failure.
+        from .theme import load_app_fonts
+
+        load_app_fonts(self.qapp)
         # Black palette so non-stylesheet surfaces (scroll viewports, etc.)
         # don't fall back to the OS-default grey behind the dark UI.
         from .theme import apply_dark_palette

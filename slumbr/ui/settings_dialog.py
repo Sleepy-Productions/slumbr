@@ -25,6 +25,12 @@ from ..theme import (
     BG_PANEL,
     BG_PANEL_HI,
     BORDER,
+    FONT_BODY,
+    RADIUS_CARD,
+    RADIUS_MD,
+    RADIUS_PILL,
+    RADIUS_XS,
+    TEXT_DISABLED,
     TEXT_PRIMARY,
     TEXT_SECONDARY,
     derive_accent,
@@ -46,9 +52,11 @@ def _dialog_qss(primary: str, hover: str, deep: str, pill_bg: str) -> str:
     # Contrasting text for elements FILLED with the accent (primary button,
     # combo selection): a light/white accent needs dark text, not white-on-white.
     on_primary = text_on(primary)
+    # Spacing on the 8pt grid; one radius scale (RADIUS_*); disabled states on
+    # every interactive control; Inter as the body face (Segoe UI fallback).
     return f"""
     QDialog {{ background-color: {BG_DARK}; }}
-    QWidget {{ color: {TEXT_PRIMARY}; font-family: "Segoe UI"; }}
+    QWidget {{ color: {TEXT_PRIMARY}; font-family: "{FONT_BODY}", "Segoe UI"; }}
     QLabel {{ color: {TEXT_PRIMARY}; }}
 
     QTabWidget::pane {{
@@ -58,7 +66,7 @@ def _dialog_qss(primary: str, hover: str, deep: str, pill_bg: str) -> str:
     QTabBar::tab {{
         background-color: transparent;
         color: {TEXT_SECONDARY};
-        padding: 11px 22px;
+        padding: 12px 20px;
         border: none;
         margin-right: 4px;
     }}
@@ -75,8 +83,8 @@ def _dialog_qss(primary: str, hover: str, deep: str, pill_bg: str) -> str:
         background-color: {BG_PANEL_HI};
         color: {TEXT_PRIMARY};
         border: 1px solid {BORDER};
-        border-radius: 10px;
-        padding: 9px 18px;
+        border-radius: {RADIUS_MD}px;
+        padding: 8px 16px;
         font-weight: 500;
     }}
     QPushButton:hover {{ border: 1px solid {primary}; }}
@@ -85,17 +93,27 @@ def _dialog_qss(primary: str, hover: str, deep: str, pill_bg: str) -> str:
         border: 1px solid {deep};
     }}
     QPushButton:focus {{ border: 1px solid {primary}; outline: none; }}
+    QPushButton:disabled {{
+        background-color: {BG_PANEL};
+        color: {TEXT_DISABLED};
+        border: 1px solid {BORDER};
+    }}
     QPushButton#primary {{
         background-color: {primary};
         color: {on_primary};
         border: 1px solid {primary};
         font-weight: 700;
-        padding: 11px 22px;
+        padding: 12px 20px;
     }}
     QPushButton#primary:hover {{
         background-color: {hover};
         color: {on_primary};
         border: 1px solid {hover};
+    }}
+    QPushButton#primary:disabled {{
+        background-color: {BG_PANEL_HI};
+        color: {TEXT_DISABLED};
+        border: 1px solid {BORDER};
     }}
     QPushButton#destructive:hover {{
         border: 1px solid #C97A7A;
@@ -105,13 +123,14 @@ def _dialog_qss(primary: str, hover: str, deep: str, pill_bg: str) -> str:
     QComboBox {{
         background-color: {BG_PANEL_HI};
         border: 1px solid {BORDER};
-        border-radius: 10px;
-        padding: 10px 14px;
+        border-radius: {RADIUS_MD}px;
+        padding: 8px 12px;
         min-height: 24px;
         selection-background-color: {primary};
     }}
     QComboBox:hover {{ border: 1px solid {primary}; }}
     QComboBox:focus {{ border: 1px solid {primary}; }}
+    QComboBox:disabled {{ color: {TEXT_DISABLED}; border: 1px solid {BORDER}; }}
     QComboBox QAbstractItemView {{
         background-color: {BG_PANEL};
         color: {TEXT_PRIMARY};
@@ -119,15 +138,16 @@ def _dialog_qss(primary: str, hover: str, deep: str, pill_bg: str) -> str:
         selection-background-color: {primary};
         selection-color: {on_primary};
         outline: 0;
-        padding: 6px;
+        padding: 8px;
     }}
 
-    QCheckBox {{ color: {TEXT_PRIMARY}; spacing: 12px; padding: 6px 0; }}
+    QCheckBox {{ color: {TEXT_PRIMARY}; spacing: 12px; padding: 8px 0; }}
+    QCheckBox:disabled {{ color: {TEXT_DISABLED}; }}
     QCheckBox::indicator {{
         width: 20px;
         height: 20px;
         border: 1px solid {BORDER};
-        border-radius: 5px;
+        border-radius: {RADIUS_XS}px;
         background: {BG_PANEL_HI};
     }}
     QCheckBox::indicator:hover {{ border: 1px solid {primary}; }}
@@ -135,12 +155,13 @@ def _dialog_qss(primary: str, hover: str, deep: str, pill_bg: str) -> str:
         background: {primary};
         border: 1px solid {primary};
     }}
+    QCheckBox::indicator:disabled {{ border: 1px solid {BORDER}; background: {BG_PANEL}; }}
 
     QTextEdit, QPlainTextEdit {{
         background-color: {BG_PANEL};
         border: 1px solid {BORDER};
-        border-radius: 12px;
-        padding: 14px;
+        border-radius: {RADIUS_CARD}px;
+        padding: 16px;
         color: {TEXT_PRIMARY};
         selection-background-color: {primary};
     }}
@@ -152,19 +173,19 @@ def _dialog_qss(primary: str, hover: str, deep: str, pill_bg: str) -> str:
         background-color: {pill_bg};
         color: {primary};
         border: 1px solid {deep};
-        border-radius: 10px;
-        padding: 6px 14px;
+        border-radius: {RADIUS_PILL}px;
+        padding: 8px 16px;
         font-weight: 700;
     }}
 
     QScrollBar:vertical {{
         background: transparent;
         width: 12px;
-        margin: 6px 2px 6px 0;
+        margin: 8px 2px 8px 0;
     }}
     QScrollBar::handle:vertical {{
         background: {BG_PANEL_HI};
-        border-radius: 5px;
+        border-radius: {RADIUS_XS}px;
         min-height: 40px;
     }}
     QScrollBar::handle:vertical:hover {{ background: {deep}; }}
