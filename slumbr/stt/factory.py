@@ -33,7 +33,9 @@ def build_transcriber(
     name = cfg.name
     log.info("building transcriber: backend=%s model=%s", name, cfg.model)
 
-    if name == "cuda_ct2":
+    if name in ("cuda_ct2", "cpu_ct2"):
+        # Same engine; cpu_ct2 forces device="cpu" (real Whisper accuracy
+        # on no-GPU machines). See WhisperCT2Transcriber.
         from .backends.whisper_ct2 import WhisperCT2Transcriber  # noqa: PLC0415
         return WhisperCT2Transcriber(cfg, language=language, initial_prompt=initial_prompt)
 
