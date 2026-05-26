@@ -28,6 +28,7 @@ from ..theme import (
     TEXT_PRIMARY,
     TEXT_SECONDARY,
     derive_accent,
+    text_on,
 )
 from .tabs.about import AboutTab
 from .tabs.behavior import BehaviorTab
@@ -42,6 +43,9 @@ def _dialog_qss(primary: str, hover: str, deep: str, pill_bg: str) -> str:
     """Dialog stylesheet, recolored from the user's accent. ``primary`` is the
     chosen color; ``hover``/``deep`` are derived shades; ``pill_bg`` is the
     translucent hotkey-pill fill (see theme.derive_accent)."""
+    # Contrasting text for elements FILLED with the accent (primary button,
+    # combo selection): a light/white accent needs dark text, not white-on-white.
+    on_primary = text_on(primary)
     return f"""
     QDialog {{ background-color: {BG_DARK}; }}
     QWidget {{ color: {TEXT_PRIMARY}; font-family: "Segoe UI"; }}
@@ -83,12 +87,14 @@ def _dialog_qss(primary: str, hover: str, deep: str, pill_bg: str) -> str:
     QPushButton:focus {{ border: 1px solid {primary}; outline: none; }}
     QPushButton#primary {{
         background-color: {primary};
+        color: {on_primary};
         border: 1px solid {primary};
         font-weight: 700;
         padding: 11px 22px;
     }}
     QPushButton#primary:hover {{
         background-color: {hover};
+        color: {on_primary};
         border: 1px solid {hover};
     }}
     QPushButton#destructive:hover {{
@@ -111,7 +117,7 @@ def _dialog_qss(primary: str, hover: str, deep: str, pill_bg: str) -> str:
         color: {TEXT_PRIMARY};
         border: 1px solid {BORDER};
         selection-background-color: {primary};
-        selection-color: {TEXT_PRIMARY};
+        selection-color: {on_primary};
         outline: 0;
         padding: 6px;
     }}
