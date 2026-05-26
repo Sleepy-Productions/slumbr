@@ -10,31 +10,34 @@ see project memory `brand-palette` for provenance.
 
 from __future__ import annotations
 
-# Violet scale, light → deep
-VIOLET_TINT = "#F3EDFF"  # for text overlays
-VIOLET_PALE = "#DCC8FF"  # for subtle highlights
-VIOLET_LIGHT = "#CAA3FF"  # for hovers
-VIOLET_PRIMARY = "#9B6FE0"  # accent — RECORDING dot, tray-active
-VIOLET_PRIMARY_HOVER = "#AD84E8"  # filled-button hover (between primary and light)
-VIOLET_DEEP = "#7B4FC0"  # TRANSCRIBING dot, borders
+# STARK BLACK & WHITE — yin-yang. No violet/purple, no blue tint, no muddy
+# mid-grays in the chrome: pure-black surfaces, pure-white foreground, with a
+# single neutral gray reserved ONLY for secondary text hierarchy. The names
+# below are kept (legacy "VIOLET_*") but now hold a white→gray scale, so every
+# reference across the app turns monochrome without touching call sites.
+VIOLET_TINT = "#F2F2F2"
+VIOLET_PALE = "#D4D4D4"
+VIOLET_LIGHT = "#E6E6E6"
+VIOLET_PRIMARY = "#FFFFFF"  # the "accent" — pure white (RECORDING dot, brand, active)
+VIOLET_PRIMARY_HOVER = "#DBDBDB"  # filled-button hover
+VIOLET_DEEP = "#9A9A9A"  # secondary state / pressed / TRANSCRIBING — neutral gray
 
-# Dark surfaces — near-black, neutral (no blue tint), matching the SleepyDev
-# black+white house brand. Small steps between layers keep cards/borders
-# legible without the surfaces reading as "gray".
+# Dark surfaces — PURE BLACK, neutral. Cards sit a hair above black and are
+# defined by a clearly-visible neutral border (white-line-on-black feel).
 BG_DARK = "#000000"  # window backgrounds (pure black)
-BG_PANEL = "#08080A"  # elevated panels (popup pill)
-BG_PANEL_HI = "#0D0D11"  # cards / button rest (outline-on-black look)
-BORDER = "#2A2A30"  # 1px dividers — define cards on the black surface
-TEXT_PRIMARY = "#F3EDFF"  # white-ish for body
-TEXT_SECONDARY = "#A09EB0"  # muted
+BG_PANEL = "#050505"  # elevated panels (popup pill)
+BG_PANEL_HI = "#0E0E0E"  # cards / button rest
+BORDER = "#3A3A3A"  # 1px dividers — neutral, clearly visible on black
+TEXT_PRIMARY = "#FFFFFF"  # pure white body
+TEXT_SECONDARY = "#9A9A9A"  # neutral gray — secondary text hierarchy only
 
-# State semantics — referenced by tray and popup
-COLOR_IDLE = "#9090A0"  # neutral gray; bumped from #7A7A82 for taskbar contrast
-COLOR_RECORDING = VIOLET_PRIMARY
-COLOR_TRANSCRIBING = VIOLET_DEEP
-COLOR_PASTING = VIOLET_DEEP
-COLOR_SENT = "#5FB87A"  # confident green — brief "✓ Sent" confirmation flash
-COLOR_ERROR = "#E0685F"  # red — brief "✗ Failed" flash when something goes wrong
+# State semantics — referenced by tray and popup (monochrome)
+COLOR_IDLE = "#6A6A6A"  # dim neutral gray (idle tray dot)
+COLOR_RECORDING = VIOLET_PRIMARY     # white
+COLOR_TRANSCRIBING = VIOLET_DEEP     # gray
+COLOR_PASTING = VIOLET_DEEP          # gray
+COLOR_SENT = "#5FB87A"  # green — brief "✓ Sent" flash (functional success signal)
+COLOR_ERROR = "#E0685F"  # red — brief "✗ Failed" flash (functional error signal)
 
 
 # ---- accent derivation ----------------------------------------------------

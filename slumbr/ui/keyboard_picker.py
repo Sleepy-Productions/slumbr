@@ -43,6 +43,7 @@ from ..theme import (
     TEXT_SECONDARY,
     VIOLET_DEEP,
     VIOLET_PRIMARY,
+    text_on,
 )
 
 # Base unit (one "1U" key in px). Adjust this single number to scale the
@@ -111,6 +112,7 @@ class _KeyButton(QPushButton):
 def _build_qss(primary: str, deep: str) -> str:
     """Keyboard stylesheet recolored from the accent — selected keys fill with
     ``primary``, hover/pressed use ``deep``."""
+    on_primary = text_on(primary)  # dark text on a light/white selected key
     return f"""
 QFrame#keyboard-frame {{
     background-color: {BG_PANEL};
@@ -144,7 +146,7 @@ QPushButton:disabled {{
 QPushButton[data-state="selected"] {{
     background-color: {primary};
     border: 1px solid {primary};
-    color: {TEXT_PRIMARY};
+    color: {on_primary};
     font-weight: 700;
 }}
 QPushButton[data-state="selected"]:hover {{
