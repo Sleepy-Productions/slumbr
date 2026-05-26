@@ -29,7 +29,7 @@ from PySide6.QtWidgets import (
 from ..config import SlumbrConfig
 from ..stt.factory import build_transcriber
 from ..stt.streaming_engine import StreamingASREngine
-from ..theme import BG_DARK, BORDER, TEXT_PRIMARY, TEXT_SECONDARY, VIOLET_PRIMARY
+from ..theme import BG_DARK, BORDER, FONT_DISPLAY, TEXT_PRIMARY, TEXT_SECONDARY, VIOLET_PRIMARY
 
 log = logging.getLogger(__name__)
 
@@ -91,7 +91,7 @@ class _PreparingDialog(QDialog):
         lay.setSpacing(12)
 
         title = QLabel("Preparing Slumbr…")
-        tf = QFont()
+        tf = QFont(FONT_DISPLAY)
         tf.setPointSize(15)
         tf.setBold(True)
         title.setFont(tf)

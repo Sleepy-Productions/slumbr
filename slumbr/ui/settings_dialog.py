@@ -127,6 +127,7 @@ def _dialog_qss(primary: str, hover: str, deep: str, pill_bg: str) -> str:
         padding: 8px 12px;
         min-height: 24px;
         selection-background-color: {primary};
+        selection-color: {on_primary};
     }}
     QComboBox:hover {{ border: 1px solid {primary}; }}
     QComboBox:focus {{ border: 1px solid {primary}; }}
@@ -164,6 +165,7 @@ def _dialog_qss(primary: str, hover: str, deep: str, pill_bg: str) -> str:
         padding: 16px;
         color: {TEXT_PRIMARY};
         selection-background-color: {primary};
+        selection-color: {on_primary};
     }}
     QTextEdit:focus, QPlainTextEdit:focus {{
         border: 1px solid {primary};
