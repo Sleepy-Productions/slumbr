@@ -7,11 +7,13 @@
 # runtime DLLs. The AMD/DirectML stack (torch/transformers/optimum) is still
 # excluded — that flavor is best left to pip-on-demand (see README).
 #
-# NOTE: NOT yet built/verified end-to-end like the CPU flavor. The likely
-# iteration point is CUDA DLL resolution inside the frozen bundle — handled
-# by collecting the nvidia.* wheels below + the _MEIPASS branch added to
-# slumbr/__init__._add_nvidia_dll_dirs. Verify the first transcribe loads
-# cublas/cudnn on a clean machine.
+# VERIFIED end-to-end (2026-05-26): the frozen exe loads large-v3-turbo on
+# CUDA, warm-up transcribes on the GPU, and reaches "ready". The hard part was
+# that PyInstaller's PySide6 runtime hook imports QtCore during bootstrap
+# (before the entry script), which broke CTranslate2's CUDA init — fixed by
+# rthook_cuda_preload.py (runtime_hooks below), which preloads CUDA/CTranslate2
+# BEFORE Qt. cuDNN/NVRTC are pruned (see _PRUNE_DLLS) since CTranslate2's
+# inference path is cuBLAS-based and never loads them.
 
 import os
 
