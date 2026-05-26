@@ -38,6 +38,7 @@ from ..theme import (
 )
 from .anim import fade_window_in
 from .tabs.about import AboutTab
+from .tabs.advanced import AdvancedTab
 from .tabs.behavior import BehaviorTab
 from .tabs.customization import CustomizationTab
 from .tabs.engine import EngineTab
@@ -246,6 +247,7 @@ class SettingsDialog(QDialog):
         self._customization_tab = CustomizationTab(config)
         self._shortcuts_tab = ShortcutsTab(config)
         self._history_tab = HistoryTab()
+        self._advanced_tab = AdvancedTab(config)
         self._about_tab = AboutTab(config)
 
         self._tabs.addTab(self._engine_tab, "Engine")
@@ -254,6 +256,7 @@ class SettingsDialog(QDialog):
         self._tabs.addTab(self._customization_tab, "Customization")
         self._tabs.addTab(self._shortcuts_tab, "Shortcuts")
         self._tabs.addTab(self._history_tab, "History")
+        self._tabs.addTab(self._advanced_tab, "Advanced")
         self._tabs.addTab(self._about_tab, "About")
 
         # Wire signals → app callbacks
@@ -261,6 +264,7 @@ class SettingsDialog(QDialog):
         self._voice_tab.config_changed.connect(self._handle_config_changed)
         self._behavior_tab.config_changed.connect(self._handle_config_changed)
         self._customization_tab.config_changed.connect(self._handle_config_changed)
+        self._advanced_tab.config_changed.connect(self._handle_config_changed)
         self._shortcuts_tab.hotkey_changed.connect(self._handle_hotkey_changed)
         self._about_tab.quit_requested.connect(self._handle_quit)
         self._about_tab.restart_requested.connect(self._handle_restart)
@@ -304,7 +308,7 @@ class SettingsDialog(QDialog):
         self.setStyleSheet(_dialog_qss(primary, hover, deep, pill_bg))
         self._engine_tab.reflect_accent(primary)
         self._shortcuts_tab.reflect_accent(primary, deep)
-        self._behavior_tab.reflect_accent(primary)
+        self._advanced_tab.reflect_accent(primary)
         self._customization_tab.reflect_accent(primary)
         self._about_tab.reflect_accent(primary)
 
