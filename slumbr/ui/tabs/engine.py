@@ -78,11 +78,14 @@ class _OptionCard(QFrame):
 
     clicked = Signal()
 
-    def __init__(self, tier_key: str, value_text: str, note: str) -> None:
+    def __init__(
+        self, tier_key: str, value_text: str, note: str, accent: str = VIOLET_PRIMARY
+    ) -> None:
         super().__init__()
         self.setObjectName("optCard")
         self.setCursor(Qt.PointingHandCursor)
         self._active = False
+        self._accent = accent
 
         lay = QVBoxLayout(self)
         lay.setContentsMargins(14, 10, 14, 10)
@@ -91,9 +94,9 @@ class _OptionCard(QFrame):
         row = QHBoxLayout()
         row.setSpacing(6)
         chip = QLabel(TIER_LABELS.get(tier_key, tier_key.title()))
-        chip.setStyleSheet(f"color: {VIOLET_PRIMARY}; font-weight: 700; font-size: 9pt;")
+        chip.setStyleSheet(f"color: {accent}; font-weight: 700; font-size: 9pt;")
         self._check = QLabel("")
-        self._check.setStyleSheet(f"color: {VIOLET_PRIMARY}; font-weight: 700; font-size: 9pt;")
+        self._check.setStyleSheet(f"color: {accent}; font-weight: 700; font-size: 9pt;")
         row.addWidget(chip)
         row.addStretch(1)
         row.addWidget(self._check)
@@ -116,7 +119,7 @@ class _OptionCard(QFrame):
         self._apply_style()
 
     def _apply_style(self) -> None:
-        border = VIOLET_PRIMARY if self._active else BORDER
+        border = self._accent if self._active else BORDER
         width = 2 if self._active else 1
         self.setStyleSheet(
             f"QFrame#optCard {{ background: {BG_PANEL_HI}; border: {width}px solid {border}; "
@@ -145,6 +148,7 @@ class EngineTab(QWidget):
     def __init__(self, config: SlumbrConfig) -> None:
         super().__init__()
         self._config = config
+        self._accent = config.accent_color  # tier-card chips/checks/active border
         if self._config.backend is None:
             self._config.backend = BackendConfig(
                 name="moonshine", model="moonshine-base-en-int8", threads=4
@@ -277,6 +281,14 @@ class EngineTab(QWidget):
             if w is not None:
                 w.deleteLater()
 
+    def reflect_accent(self, primary: str) -> None:
+        """Recolor the tier cards (chips, checks, active border) when the user
+        picks a new accent — rebuilds the rows so every card gets it."""
+        self._accent = primary
+        self._populate_backend_row()
+        self._rebuild_model_row()
+        self._rebuild_compute_row()
+
     def _populate_backend_row(self) -> None:
         self._backend_cards.clear()
         self._clear_row(self._backend_row)
@@ -285,7 +297,7 @@ class EngineTab(QWidget):
         cur = self._config.backend.name if self._config.backend else None
         for opt in backend_options(self._profile):
             label = _BACKEND_LABELS.get(opt.value, opt.value)
-            card = _OptionCard(opt.key, label, opt.note)
+            card = _OptionCard(opt.key, label, opt.note, self._accent)
             card.set_active(opt.value == cur)
             card.clicked.connect(lambda v=opt.value: self._on_pick_backend(v))
             self._backend_cards.append((card, opt))
@@ -298,7 +310,7 @@ class EngineTab(QWidget):
             return
         cur = self._config.backend.model
         for opt in model_options(self._config.backend.name, self._profile):
-            card = _OptionCard(opt.key, _model_display(opt.value), opt.note)
+            card = _OptionCard(opt.key, _model_display(opt.value), opt.note, self._accent)
             card.set_active(opt.value == cur)
             card.clicked.connect(lambda v=opt.value: self._on_pick_model(v))
             self._model_cards.append((card, opt))
@@ -314,7 +326,7 @@ class EngineTab(QWidget):
         self._compute_section.setVisible(bool(opts))
         cur = self._config.backend.compute_type
         for opt in opts:
-            card = _OptionCard(opt.key, opt.value, opt.note)
+            card = _OptionCard(opt.key, opt.value, opt.note, self._accent)
             card.set_active(opt.value == cur)
             card.clicked.connect(lambda v=opt.value: self._on_pick_compute(v))
             self._compute_cards.append((card, opt))

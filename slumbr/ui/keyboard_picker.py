@@ -108,7 +108,10 @@ class _KeyButton(QPushButton):
         self._set_state("selected" if selected else "idle")
 
 
-_QSS = f"""
+def _build_qss(primary: str, deep: str) -> str:
+    """Keyboard stylesheet recolored from the accent — selected keys fill with
+    ``primary``, hover/pressed use ``deep``."""
+    return f"""
 QFrame#keyboard-frame {{
     background-color: {BG_PANEL};
     border: 1px solid {BORDER};
@@ -123,15 +126,15 @@ QPushButton {{
     padding: 0;
 }}
 QPushButton:hover {{
-    border: 1px solid {VIOLET_PRIMARY};
+    border: 1px solid {primary};
 }}
 QPushButton:focus {{
-    border: 1px solid {VIOLET_PRIMARY};
+    border: 1px solid {primary};
     outline: none;
 }}
 QPushButton:pressed {{
-    background-color: {VIOLET_DEEP};
-    border: 1px solid {VIOLET_DEEP};
+    background-color: {deep};
+    border: 1px solid {deep};
 }}
 QPushButton:disabled {{
     color: {TEXT_SECONDARY};
@@ -139,14 +142,14 @@ QPushButton:disabled {{
     border: 1px solid {BORDER};
 }}
 QPushButton[data-state="selected"] {{
-    background-color: {VIOLET_PRIMARY};
-    border: 1px solid {VIOLET_PRIMARY};
+    background-color: {primary};
+    border: 1px solid {primary};
     color: {TEXT_PRIMARY};
     font-weight: 700;
 }}
 QPushButton[data-state="selected"]:hover {{
-    background-color: {VIOLET_DEEP};
-    border: 1px solid {VIOLET_DEEP};
+    background-color: {deep};
+    border: 1px solid {deep};
 }}
 """
 
@@ -163,7 +166,8 @@ class KeyboardPicker(QWidget):
 
         frame = QFrame()
         frame.setObjectName("keyboard-frame")
-        frame.setStyleSheet(_QSS)
+        frame.setStyleSheet(_build_qss(VIOLET_PRIMARY, VIOLET_DEEP))
+        self._frame = frame
 
         rows_layout = QVBoxLayout(frame)
         rows_layout.setSpacing(_GAP)
@@ -222,6 +226,10 @@ class KeyboardPicker(QWidget):
             btn.mark_selected(normalize_modifier(btn.vk()) in self._combo)
         full = " — combo full" if len(self._combo) >= MAX_COMBO_KEYS else ""
         self._caption.setText(f"Currently bound: {combo_label(self._combo)}{full}")
+
+    def reflect_accent(self, primary: str, deep: str) -> None:
+        """Recolor the keyboard (selected-key fill, hovers) to the accent."""
+        self._frame.setStyleSheet(_build_qss(primary, deep))
 
     def set_current_combo(self, vks: list[int]) -> None:
         """External setter — keep the keyboard in sync if config changes elsewhere."""
