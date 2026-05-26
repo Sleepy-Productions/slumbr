@@ -4,6 +4,30 @@ All notable changes to Slumbr are documented in this file. The format follows [K
 
 Slumbr is in pre-1.0; the public API and config format may shift between minor releases. The first 1.0 will lock both.
 
+## [0.3.0] — 2026-05-26
+
+The launch-readiness release. A reorganized Settings UI, a session-scoped History with a recovery safety net, proper Windows app identity (no more "pins as Python"), and a pile of polish + correctness fixes.
+
+### Added
+- **Session logs + crash recovery.** When live History fills to 30 it rolls the batch into a temporary *session log* and the list resets fresh; rolled batches are browsable from a "Session logs" drill-in and cleared on a clean quit. If Slumbr closes unexpectedly, the last session's transcripts are written to `%APPDATA%\Slumbr\crash-logs\` and offered back via a Recover / Discard prompt on next launch; uncaught exceptions also drop a traceback crash log.
+- **Advanced Settings tab** — virtual-cable picker + installer, auto-send, "keep transcript on clipboard", and the vocabulary hint, moved out of the everyday surfaces.
+- **Copy from History** — per row (double-click / right-click / Ctrl+C) and "Copy all".
+- **Start Menu shortcut** alongside the desktop one, so Slumbr is findable in Start search.
+- **Bundled house fonts** Inter + Sora (SIL OFL-1.1; licenses included under `slumbr/assets/fonts/`).
+
+### Changed
+- **Settings is now a grouped left-sidebar** (Setup / Preferences / Info) instead of top tabs, restyled on a house design system (Inter/Sora, 8pt spacing, one radius scale, disabled states, fade-in). Opens centered on launch.
+- **History is session-scoped** — resets each launch; the live list never exceeds 30 (older batches roll into session logs).
+- **Windows app identity (AUMID).** Set on the process and on both shortcuts, so the taskbar button, pinning, jump list, and Start all read "Slumbr" instead of the host `pythonw.exe` / "Python".
+- **Brand mark is fixed monochrome white** everywhere (shell icon, taskbar, About logo) — it never follows the user's accent.
+- **Source-install is the v1 path** — `install.ps1` from a clone; the unsigned `.exe` is deferred (Windows Defender quarantines it). README rewritten for source install.
+
+### Fixed
+- **Recurring "pink desktop icon."** `install.ps1` now busts the Windows shell icon cache (drop the cache DBs + `ie4uinit -show` + `SHChangeNotify`) so a stale tinted icon can't linger — the baked `.ico` and all runtime icons were already white.
+- **White-on-white accent contrast.** Accent-filled controls compute a contrast-aware text color, so a light/white accent gets dark text instead of vanishing.
+- **Paste-method labels** corrected — Ctrl+V default, Ctrl+Shift+V fallback, "type each character" for clipboard-hostile apps.
+- Tray menu drops the stale "Reverse PTT (Discord)" item.
+
 ## [0.2.0] — 2026-05-22
 
 The "make it actually usable on any Windows machine" release. Lifts Slumbr off its NVIDIA-only foundation, deletes the hub window in favor of a tabbed Settings dialog, ships a first-launch wizard that picks the right backend per detected hardware, and adds universal reverse-PTT for any call app.
