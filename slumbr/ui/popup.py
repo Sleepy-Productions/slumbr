@@ -44,6 +44,7 @@ from PySide6.QtWidgets import (
 from ..theme import (
     BG_PANEL,
     BORDER,
+    COLOR_ERROR,
     COLOR_IDLE,
     COLOR_RECORDING,
     COLOR_SENT,
@@ -537,14 +538,14 @@ class RecordingPopup(QWidget):
         self._resize_to: tuple[int, int] = (_POPUP_W, _POPUP_H)
         self._resize_top_y: int = 0  # screen-space y of the pinned top edge
 
-        # "✓ Sent" confirmation. After a successful paste the popup turns
-        # green + shows the check for a beat so the user KNOWS the message
-        # landed, then auto-hides. Single-shot.
-        self._sent_flash = False
-        self._sent_timer = QTimer(self)
-        self._sent_timer.setSingleShot(True)
-        self._sent_timer.setInterval(700)
-        self._sent_timer.timeout.connect(self._finish_sent)
+        # Outcome flash. After a successful paste the popup turns green and
+        # shows "✓ Sent"; on a failure it turns red with "✗ Failed". Either
+        # way it auto-hides after a beat so the user gets an unmistakable
+        # signal. ``_flash_color`` is the active flash tint (None = no flash).
+        self._flash_color: str | None = None
+        self._flash_timer = QTimer(self)
+        self._flash_timer.setSingleShot(True)
+        self._flash_timer.timeout.connect(self._finish_flash)
 
         self._dot = _StatusDot(self)
 
@@ -587,9 +588,10 @@ class RecordingPopup(QWidget):
     def paintEvent(self, _event) -> None:  # noqa: N802
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
-        # Green border while flashing "✓ Sent"; normal border otherwise.
-        border_color = COLOR_SENT if self._sent_flash else BORDER
-        width = 2 if self._sent_flash else 1
+        # Tinted border while flashing an outcome (green sent / red failed);
+        # normal border otherwise.
+        border_color = self._flash_color if self._flash_color is not None else BORDER
+        width = 2 if self._flash_color is not None else 1
         p.setPen(QPen(QColor(border_color), width))
         p.setBrush(QBrush(QColor(BG_PANEL)))
         p.drawRoundedRect(self.rect().adjusted(0, 0, -1, -1), 12, 12)
@@ -613,9 +615,9 @@ class RecordingPopup(QWidget):
 
     # ------------------------------------------------------------------ API
     def show_recording(self) -> None:
-        # Cancel any in-flight "✓ Sent" flash from the previous utterance.
-        self._sent_timer.stop()
-        self._sent_flash = False
+        # Cancel any in-flight outcome flash from the previous utterance.
+        self._flash_timer.stop()
+        self._flash_color = None
         self._dot.set_color(COLOR_RECORDING)
         self._elapsed_label.setText("0:00")
         self._visualizer.start()
@@ -673,30 +675,40 @@ class RecordingPopup(QWidget):
         self._elapsed_label.setText(f"{m}:{s:02d}")
 
     def flash_sent(self) -> None:
-        """Confirm a successful paste with a brief green "✓ Sent", then
-        auto-hide. The green border flash shows in compact mode too; the
-        dot + label only exist in the normal layout.
+        """Confirm a successful paste with a brief green "✓ Sent"."""
+        self._flash(COLOR_SENT, "✓ Sent", 700)
+
+    def flash_error(self) -> None:
+        """Signal a failure with a brief red "✗ Failed". Held a touch longer
+        than the sent flash so the user actually registers it (the tray
+        notification carries the detail)."""
+        self._flash(COLOR_ERROR, "✗ Failed", 1600)
+
+    def _flash(self, color: str, label: str, duration_ms: int) -> None:
+        """Tint the popup (border + dot + label) for ``duration_ms`` as an
+        outcome cue, then auto-hide. The border tint shows in compact mode
+        too; the dot + label only exist in the normal layout.
         """
         self._visualizer.stop()
         self._follow_timer.stop()
         self._resize_timer.stop()
         self._collapse_partial(animated=False)
-        self._sent_flash = True
+        self._flash_color = color
         if not self._compact:
-            self._dot.set_color(COLOR_SENT)
-            self._elapsed_label.setText("✓ Sent")
+            self._dot.set_color(color)
+            self._elapsed_label.setText(label)
         if not self.isVisible():
             self.show()
             self.raise_()
         self.update()
-        self._sent_timer.start()
+        self._flash_timer.start(duration_ms)
 
-    def _finish_sent(self) -> None:
-        self._sent_flash = False
+    def _finish_flash(self) -> None:
+        self._flash_color = None
         self.hide_popup()
 
     def hide_popup(self) -> None:
-        self._sent_flash = False
+        self._flash_color = None
         self._visualizer.stop()
         self._follow_timer.stop()
         self._collapse_partial()
