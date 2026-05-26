@@ -54,3 +54,6 @@ dist/
 .venv-cpu/
 packaging/dist-installer/
 *.spec.bak
+# ...but the hand-written packaging spec IS source (the global *.spec rule
+# near the top would otherwise drop it).
+!packaging/slumbr-cpu.spec

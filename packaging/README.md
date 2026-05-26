@@ -43,7 +43,18 @@ First builds usually need a couple of iterations:
 - Test the built exe on a **clean machine / fresh user** (no Python, no
   `%APPDATA%\Slumbr`) to catch missing-dependency and first-run-download bugs.
 
+## Status: verified to boot
+The CPU onedir builds at ~176 MB and the packaged `Slumbr.exe` launches to
+the setup wizard with no Python and no GPU (tested with a throwaway
+`%APPDATA%`). Remaining before calling it shippable: run the full wizard →
+first-run model download → dictation once on a **clean machine**, then wrap
+with Inno Setup.
+
 ## Files
+- `slumbr_entry.py` — PyInstaller entry point. Imports `slumbr.__main__` as a
+  real submodule so its relative imports resolve (running `__main__.py`
+  directly as the rootless top-level script raised "attempted relative import
+  with no known parent package"). The frozen equivalent of `python -m slumbr`.
 - `slumbr-cpu.spec` — PyInstaller spec (CPU-only excludes).
 - `build_cpu.ps1` — clean-venv build + optional Inno compile.
 - `slumbr.iss` — Inno Setup installer script.
