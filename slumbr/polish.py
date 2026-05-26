@@ -26,6 +26,63 @@ import re
 _AFTER_TERMINAL = re.compile(r"([.!?]\s+)([a-z])")
 _TERMINATORS = frozenset(".!?,;:")
 
+# ---- runaway-repetition guard --------------------------------------------
+# ASR models can spiral into emitting one phrase over and over, destroying
+# the real content — especially Moonshine on long audio, which (unlike the
+# faster-whisper engine) has no anti-repetition decode knobs. Observed
+# 2026-05-25: a 122 s dictation came out as "...the green for a while, it's
+# like a color theme. And then..." ~60 times, the actual words gone. This
+# collapses a block of words that repeats consecutively down to one copy.
+# Tuned to NEVER touch natural speech: only multi-word phrases repeated 4+
+# times, or a single word repeated 6+ times ("you you you you you you"), get
+# collapsed — real emphasis ("no no no", "really really") is left alone.
+_REPEAT_MAX_PERIOD = 16        # longest phrase (in words) we scan for looping
+_REPEAT_MIN_REPS_PHRASE = 4    # collapse a >=2-word block at this many reps
+_REPEAT_MIN_REPS_WORD = 6      # single-word block needs more (spare emphasis)
+_REPEAT_MIN_WORDS = 8          # below this the text is too short to be a loop
+
+
+def _norm_word(w: str) -> str:
+    return w.lower().strip(".,!?;:\"'()-")
+
+
+def _collapse_repetition(text: str) -> str:
+    """Collapse consecutively-repeated word blocks (runaway ASR loops)."""
+    words = text.split()
+    if len(words) < _REPEAT_MIN_WORDS:
+        return text
+    changed = True
+    # Re-run until stable so multi-scale loops (a period-12 run, then a
+    # residual period-7 tail) both collapse.
+    while changed:
+        changed = False
+        norm = [_norm_word(w) for w in words]
+        n = len(words)
+        for p in range(1, _REPEAT_MAX_PERIOD + 1):
+            min_reps = _REPEAT_MIN_REPS_WORD if p == 1 else _REPEAT_MIN_REPS_PHRASE
+            out: list[str] = []
+            i = 0
+            collapsed = False
+            while i < n:
+                reps = 1
+                while (
+                    i + (reps + 1) * p <= n
+                    and norm[i + reps * p : i + (reps + 1) * p] == norm[i : i + p]
+                ):
+                    reps += 1
+                if reps >= min_reps:
+                    out.extend(words[i : i + p])  # keep a single copy
+                    i += reps * p
+                    collapsed = True
+                else:
+                    out.append(words[i])
+                    i += 1
+            if collapsed:
+                words = out
+                changed = True
+                break  # restart the scan on the shrunk text
+    return " ".join(words)
+
 # Canonical Whisper trailing hallucinations (lowercased, no trailing
 # punctuation). These are phrases the model emits on silence/music at the
 # end of a clip — they're almost never something the user dictated mid-
@@ -86,6 +143,9 @@ def polish(
     if not text:
         return text
 
+    # Collapse runaway repetition first — it's the most destructive failure
+    # and shrinking it makes the rest of the pass cheaper + cleaner.
+    text = _collapse_repetition(text)
     if strip_filler:
         text = _strip_trailing_filler(text).strip()
     if replacements:
