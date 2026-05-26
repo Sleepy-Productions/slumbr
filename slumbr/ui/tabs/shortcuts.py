@@ -9,7 +9,14 @@ from __future__ import annotations
 
 from PySide6.QtCore import Signal
 from PySide6.QtGui import QFont
-from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QSizePolicy,
+    QVBoxLayout,
+    QWidget,
+)
 
 from ...config import SlumbrConfig
 from ...input.keymap import (
@@ -19,7 +26,14 @@ from ...input.keymap import (
 )
 from ...theme import BG_PANEL, BORDER, TEXT_PRIMARY, TEXT_SECONDARY
 from ..keyboard_picker import KeyboardPicker
-from ._widgets import field_hint, heading, scrollable, subheading
+from ._widgets import (
+    FlowLayout,
+    field_hint,
+    heading,
+    keycap,
+    scrollable,
+    subheading,
+)
 
 
 class ShortcutsTab(QWidget):
@@ -96,10 +110,10 @@ class ShortcutsTab(QWidget):
             """
         )
         v = QVBoxLayout(panel)
-        v.setContentsMargins(18, 14, 18, 14)
-        v.setSpacing(6)
+        v.setContentsMargins(18, 14, 18, 16)
+        v.setSpacing(8)
 
-        title = QLabel("Auto-disabled — these never bind")
+        title = QLabel("⊘  Auto-disabled — these never bind")
         tf = QFont()
         tf.setPointSize(10)
         tf.setBold(True)
@@ -107,21 +121,46 @@ class ShortcutsTab(QWidget):
         title.setStyleSheet(f"color: {TEXT_PRIMARY};")
         v.addWidget(title)
 
-        single = " · ".join(combo_disabled_key_labels())
-        v.addWidget(
-            field_hint(
-                f"Single keys: {single} — they belong to every dialog and text box."
-            )
-        )
+        v.addWidget(self._group_label("Single keys"))
+        v.addWidget(self._chip_row(combo_disabled_key_labels()))
+        v.addWidget(field_hint("They belong to every dialog and text box."))
 
-        combos = "  ·  ".join(reserved_combo_names())
+        v.addSpacing(4)
+
+        v.addWidget(self._group_label("Reserved Windows shortcuts"))
+        v.addWidget(self._chip_row(reserved_combo_names()))
         v.addWidget(
             field_hint(
-                f"Reserved Windows shortcuts: {combos} — Slumbr would either break "
-                "them or can't intercept them at all, so it won't take them."
+                "Slumbr would either break these or can't intercept them at all, "
+                "so it won't take them."
             )
         )
         return panel
+
+    def _group_label(self, text: str) -> QLabel:
+        lbl = QLabel(text.upper())
+        f = QFont()
+        f.setPointSize(8)
+        f.setBold(True)
+        lbl.setFont(f)
+        # letter-spacing via Qt font is awkward; the uppercase + secondary
+        # color is enough to read as a quiet section label above the chips.
+        lbl.setStyleSheet(f"color: {TEXT_SECONDARY};")
+        return lbl
+
+    def _chip_row(self, labels: list[str]) -> QWidget:
+        """A reflowing row of key-cap chips. Wrapped in a height-for-width
+        container so the enclosing column gives it the right height as chips
+        wrap to new lines."""
+        container = QWidget()
+        flow = FlowLayout(container, spacing=8)
+        for label in labels:
+            flow.addWidget(keycap(label))
+        sp = container.sizePolicy()
+        sp.setHeightForWidth(True)
+        sp.setVerticalPolicy(QSizePolicy.Minimum)
+        container.setSizePolicy(sp)
+        return container
 
     def _on_picker_change(self, vks: list[int]) -> None:
         self._bound_pill.setText(combo_label(vks))

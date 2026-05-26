@@ -1,16 +1,19 @@
-"""About tab — version, branding, repo link, restart + quit."""
+"""About tab — logo, version, branding, repo link, restart + quit."""
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QFont
+from PySide6.QtGui import QFont, QPixmap
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
 from ... import __version__
 from ...theme import TEXT_PRIMARY, TEXT_SECONDARY, VIOLET_PRIMARY
-from ._widgets import heading, scrollable
+from ._widgets import heading, scrollable, tag
 
 _REPO_URL = "https://github.com/SIeepyDev/slumbr"
+_LOGO_PATH = Path(__file__).resolve().parents[2] / "assets" / "icon.png"
 
 
 class AboutTab(QWidget):
@@ -22,24 +25,45 @@ class AboutTab(QWidget):
         body = QWidget()
         layout = QVBoxLayout(body)
         layout.setContentsMargins(56, 52, 56, 52)
-        layout.setSpacing(16)
+        layout.setSpacing(14)
 
-        layout.addWidget(heading("About Slumbr", size=32))
+        # ===== Header: logo + name + version + brand =====
+        header = QHBoxLayout()
+        header.setSpacing(20)
+
+        pix = QPixmap(str(_LOGO_PATH))
+        if not pix.isNull():
+            logo = QLabel()
+            logo.setPixmap(
+                pix.scaled(88, 88, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            )
+            logo.setFixedSize(88, 88)
+            header.addWidget(logo, 0, Qt.AlignTop)
+
+        namecol = QVBoxLayout()
+        namecol.setSpacing(6)
+
+        name_row = QHBoxLayout()
+        name_row.setSpacing(12)
+        name = heading("Slumbr", size=32)
+        name_row.addWidget(name, 0, Qt.AlignVCenter)
+        self._version_pill = tag(f"v{__version__}")
+        name_row.addWidget(self._version_pill, 0, Qt.AlignVCenter)
+        name_row.addStretch(1)
+        namecol.addLayout(name_row)
 
         self._brand = QLabel("Sleepy Productions")
         self._brand.setStyleSheet(f"color: {VIOLET_PRIMARY}; font-weight: 700;")
         bf = QFont()
-        bf.setPointSize(17)
+        bf.setPointSize(15)
         self._brand.setFont(bf)
-        layout.addWidget(self._brand)
+        namecol.addWidget(self._brand)
+        namecol.addStretch(1)
 
-        version = QLabel(f"Version {__version__}")
-        vf = QFont()
-        vf.setPointSize(12)
-        version.setFont(vf)
-        version.setStyleSheet(f"color: {TEXT_SECONDARY};")
-        layout.addWidget(version)
+        header.addLayout(namecol, 1)
+        layout.addLayout(header)
 
+        # ===== Tagline =====
         tagline = QLabel(
             "Local, offline voice dictation for Windows. Fully on-device — "
             "no accounts, no cloud, no telemetry. Your voice never leaves "
@@ -49,9 +73,19 @@ class AboutTab(QWidget):
         tf = QFont()
         tf.setPointSize(12)
         tagline.setFont(tf)
-        tagline.setStyleSheet(f"color: {TEXT_PRIMARY}; padding-top: 8px;")
+        tagline.setStyleSheet(f"color: {TEXT_PRIMARY}; padding-top: 6px;")
         layout.addWidget(tagline)
 
+        # ===== Feature chips =====
+        chips = QHBoxLayout()
+        chips.setSpacing(8)
+        chips.setContentsMargins(0, 6, 0, 0)
+        for label in ("Offline", "On-device", "No telemetry", "Open source · MIT"):
+            chips.addWidget(tag(label))
+        chips.addStretch(1)
+        layout.addLayout(chips)
+
+        # ===== Repo link =====
         self._link = QLabel(
             f'<a href="{_REPO_URL}" style="color: {VIOLET_PRIMARY};">{_REPO_URL}</a>'
         )
@@ -60,17 +94,12 @@ class AboutTab(QWidget):
         self._link.setFont(lf)
         self._link.setOpenExternalLinks(True)
         self._link.setTextInteractionFlags(Qt.TextBrowserInteraction)
-        self._link.setStyleSheet("padding-top: 4px;")
+        self._link.setStyleSheet("padding-top: 10px;")
         layout.addWidget(self._link)
 
-        license_label = QLabel("Released under the MIT License.")
-        license_label.setStyleSheet(f"color: {TEXT_SECONDARY};")
-        layout.addWidget(license_label)
+        layout.addSpacing(24)
 
-        layout.addSpacing(28)
-
-        # Restart + Quit, side by side. Restart is the primary action
-        # (applies pending Engine/model changes); Quit is destructive.
+        # ===== Restart + Quit =====
         btn_row = QHBoxLayout()
         btn_row.setSpacing(12)
 
@@ -95,7 +124,9 @@ class AboutTab(QWidget):
             "Restart applies pending Engine / model changes and reloads the app."
         )
         restart_hint.setWordWrap(True)
-        restart_hint.setStyleSheet(f"color: {TEXT_SECONDARY}; font-size: 9pt; padding-top: 4px;")
+        restart_hint.setStyleSheet(
+            f"color: {TEXT_SECONDARY}; font-size: 9pt; padding-top: 4px;"
+        )
         layout.addWidget(restart_hint)
 
         layout.addStretch(1)
