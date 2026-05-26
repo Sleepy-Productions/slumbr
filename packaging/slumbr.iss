@@ -7,6 +7,12 @@
 #define AppName "Slumbr"
 #define AppVersion "0.2.0"
 #define AppPublisher "Sleepy Productions"
+; Flavor (cpu / nvidia / amd) — passed by the build scripts via /DFlavor=…;
+; only changes the installer filename, since all flavors are the same app
+; with a different bundled engine stack.
+#ifndef Flavor
+  #define Flavor "cpu"
+#endif
 
 [Setup]
 AppName={#AppName}
@@ -15,7 +21,7 @@ AppPublisher={#AppPublisher}
 DefaultDirName={autopf}\Slumbr
 DefaultGroupName=Slumbr
 OutputDir=dist-installer
-OutputBaseFilename=slumbr-setup-cpu
+OutputBaseFilename=slumbr-setup-{#Flavor}
 Compression=lzma2
 SolidCompression=yes
 ArchitecturesAllowed=x64compatible
