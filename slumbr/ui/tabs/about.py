@@ -82,21 +82,18 @@ class AboutTab(QWidget):
         chips.addStretch(1)
         layout.addLayout(chips)
 
-        # ===== Repo link =====
-        # A real <a> link forces Qt's palette Link color (a tan/blue that
-        # ignores inline + palette overrides under a dialog stylesheet), which
-        # breaks the monochrome look. So render plain WHITE underlined text and
-        # open the URL on click ourselves.
-        self._link = QLabel(_REPO_URL)
-        self._link.setTextFormat(Qt.PlainText)  # stop Qt auto-linkifying the URL (tan link color)
-        lf = QFont()
-        lf.setPointSize(11)
-        lf.setUnderline(True)
-        self._link.setFont(lf)
-        self._link.setStyleSheet(f"color: {TEXT_PRIMARY}; padding-top: 10px;")
-        self._link.setCursor(Qt.PointingHandCursor)
-        self._link.mousePressEvent = lambda _e: QDesktopServices.openUrl(QUrl(_REPO_URL))
-        layout.addWidget(self._link)
+        # ===== Repo link — a clean outline button, not a raw URL =====
+        self._repo_btn = QPushButton("View on GitHub  ↗")
+        self._repo_btn.setMinimumHeight(38)
+        self._repo_btn.setCursor(Qt.PointingHandCursor)
+        self._repo_btn.clicked.connect(
+            lambda: QDesktopServices.openUrl(QUrl(_REPO_URL))
+        )
+        repo_row = QHBoxLayout()
+        repo_row.setContentsMargins(0, 8, 0, 0)
+        repo_row.addWidget(self._repo_btn)
+        repo_row.addStretch(1)
+        layout.addLayout(repo_row)
 
         layout.addSpacing(24)
 
@@ -148,8 +145,6 @@ class AboutTab(QWidget):
             pass
 
     def reflect_accent(self, primary: str) -> None:
-        """Recolor the brand text to the accent. The logo stays a fixed
-        monochrome mark, and the repo link stays plain white text (set in
-        __init__) — recoloring it to the accent re-introduced an <a> link whose
-        color Qt overrides to a tan palette link, breaking the monochrome look."""
+        """Recolor the brand wordmark to the accent. The logo stays a fixed
+        monochrome mark; the GitHub button uses the shared dialog styling."""
         self._brand.setStyleSheet(f"color: {primary}; font-weight: 700;")
