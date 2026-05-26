@@ -97,5 +97,6 @@ a.binaries = [
 print(f"[slumbr] pruned {_before - len(a.binaries)} CUDA DLLs from the bundle")
 pyz = PYZ(a.pure)
 exe = EXE(pyz, a.scripts, [], exclude_binaries=True, name="Slumbr", console=False,
-          icon="../slumbr/assets/icon.ico")
+          icon="../slumbr/assets/icon.ico",
+          version=os.path.join(SPECPATH, "version_info.txt"))
 coll = COLLECT(exe, a.binaries, a.datas, name="Slumbr")

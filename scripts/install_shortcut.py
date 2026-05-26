@@ -29,17 +29,26 @@ from slumbr.winident import APP_USER_MODEL_ID
 ROOT = Path(__file__).resolve().parents[1]
 VENV_PYTHONW = ROOT / ".venv" / "Scripts" / "pythonw.exe"
 VENV_SLUMBR = ROOT / ".venv" / "Scripts" / "Slumbr.exe"
+FROZEN_EXE = ROOT / "dist" / "Slumbr" / "Slumbr.exe"
 ICON_PATH = ROOT / "slumbr" / "assets" / "icon.ico"
-
-
-def _launcher() -> Path:
-    """Prefer the branded Slumbr.exe (a copy of pythonw made by install.ps1) so
-    the process + taskbar button + pin read as "Slumbr", not "pythonw"/"Python".
-    Fall back to pythonw.exe if the copy isn't present."""
-    return VENV_SLUMBR if VENV_SLUMBR.is_file() else VENV_PYTHONW
 SHORTCUT_NAME = "Slumbr.lnk"
 _DESCRIPTION = "Slumbr — local voice-to-text dictation"
 _SW_SHOWMINNOACTIVE = 7  # pythonw has no window; this just avoids a transient flash
+
+
+def _target() -> tuple[Path, str, Path]:
+    """What the shortcut launches, as (target, arguments, working_dir).
+
+    Prefer the FROZEN build (dist/Slumbr/Slumbr.exe) when present: it's a real
+    self-owned process that owns its window, so the taskbar/pin read "Slumbr"
+    with the brand icon. No arguments (the exe IS the app); working dir is its
+    own folder so the onedir _internal/ resolves. Otherwise fall back to the
+    venv launcher running `-m slumbr` (source install — pins as Python, a
+    pythonw/venv-redirector limitation)."""
+    if FROZEN_EXE.is_file():
+        return FROZEN_EXE, "", FROZEN_EXE.parent
+    launcher = VENV_SLUMBR if VENV_SLUMBR.is_file() else VENV_PYTHONW
+    return launcher, "-m slumbr", ROOT
 
 
 def _desktop_path() -> Path:
@@ -62,8 +71,8 @@ def _start_menu_dir() -> Path | None:
 
 def _check_prereqs() -> None:
     missing: list[str] = []
-    if not VENV_PYTHONW.is_file():
-        missing.append(f"missing pythonw: {VENV_PYTHONW}")
+    if not FROZEN_EXE.is_file() and not VENV_PYTHONW.is_file():
+        missing.append(f"no launcher: neither {FROZEN_EXE} nor {VENV_PYTHONW}")
     if not ICON_PATH.is_file():
         missing.append(f"missing icon: {ICON_PATH} — run scripts/build_icon.py first")
     if missing:
@@ -85,9 +94,10 @@ def _make_shortcut(out_path: Path) -> bool:
     link = pythoncom.CoCreateInstance(
         shell.CLSID_ShellLink, None, pythoncom.CLSCTX_INPROC_SERVER, shell.IID_IShellLink
     )
-    link.SetPath(str(_launcher()))
-    link.SetArguments("-m slumbr")
-    link.SetWorkingDirectory(str(ROOT))
+    target, args, workdir = _target()
+    link.SetPath(str(target))
+    link.SetArguments(args)
+    link.SetWorkingDirectory(str(workdir))
     link.SetIconLocation(str(ICON_PATH), 0)
     link.SetDescription(_DESCRIPTION)
     link.SetShowCmd(_SW_SHOWMINNOACTIVE)
@@ -109,11 +119,12 @@ def _via_vbscript(out_path: Path) -> None:
     launcher but cannot set the AUMID (pin will read as Python until pywin32
     is installed and this script is re-run)."""
     vbs_path = ROOT / "scripts" / "_install_shortcut.vbs"
+    _target_exe, _args, _workdir = _target()
     vbs = f"""Set ws = WScript.CreateObject("WScript.Shell")
 Set sc = ws.CreateShortcut("{out_path}")
-sc.TargetPath = "{_launcher()}"
-sc.Arguments = "-m slumbr"
-sc.WorkingDirectory = "{ROOT}"
+sc.TargetPath = "{_target_exe}"
+sc.Arguments = "{_args}"
+sc.WorkingDirectory = "{_workdir}"
 sc.IconLocation = "{ICON_PATH}"
 sc.WindowStyle = {_SW_SHOWMINNOACTIVE}
 sc.Description = "Slumbr - local voice-to-text dictation"
