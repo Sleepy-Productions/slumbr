@@ -56,6 +56,7 @@ from ..theme import (
     VIOLET_PRIMARY,
     VIOLET_PRIMARY_HOVER,
 )
+from .anim import fade_window_in
 from .tabs.engine import _BACKEND_LABELS  # noqa: PLC2701 (intentional shared list)
 
 log = logging.getLogger(__name__)
@@ -228,6 +229,12 @@ class SetupWizard(QDialog):
         outer.addLayout(footer)
 
         self._update_footer_for_index(0)
+
+    def show(self) -> None:  # noqa: N802
+        # Fade the wizard in on open — seamless, ~150ms ease-out (see ui/anim).
+        self.setWindowOpacity(0.0)
+        super().show()
+        self._fade_anim = fade_window_in(self)
 
     # ----------------------------------------------------- screens
 

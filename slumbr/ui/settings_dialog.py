@@ -36,6 +36,7 @@ from ..theme import (
     derive_accent,
     text_on,
 )
+from .anim import fade_window_in
 from .tabs.about import AboutTab
 from .tabs.behavior import BehaviorTab
 from .tabs.customization import CustomizationTab
@@ -272,6 +273,12 @@ class SettingsDialog(QDialog):
         # inline (engine cards, key picker) — the dialog QSS above already
         # covers the shared chrome.
         self._apply_accent()
+
+    def show(self) -> None:  # noqa: N802
+        # Fade the dialog in on open — seamless, ~150ms ease-out (see ui/anim).
+        self.setWindowOpacity(0.0)
+        super().show()
+        self._fade_anim = fade_window_in(self)
 
     # ----------------------------------------------------- external API
 
