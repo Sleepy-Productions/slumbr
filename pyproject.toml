@@ -12,7 +12,7 @@ requires-python = ">=3.10"
 authors = [{ name = "Sleepy Productions" }]
 keywords = ["speech-to-text", "dictation", "whisper", "voice", "stt", "offline", "windows"]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Environment :: Win32 (MS Windows)",
     "Intended Audience :: End Users/Desktop",
     "License :: OSI Approved :: MIT License",
@@ -45,6 +45,10 @@ dependencies = [
     "pyqtgraph",
     "pystray",
     "Pillow",
+    # Win32 APIs — HWND paste targeting + desktop-shortcut creation. Was
+    # pip-installed ad-hoc by install.ps1; declared here so `pip install -e .`
+    # is self-sufficient.
+    "pywin32",
 ]
 
 [project.optional-dependencies]

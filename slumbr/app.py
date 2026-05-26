@@ -393,6 +393,9 @@ class SlumbrApp:
         except Exception as e:  # noqa: BLE001
             log.error("paste failed: %s", e)
             paste_ok = False
+            # The popup flashes red, but the user may not be looking — a tray
+            # balloon makes the failure unmissable and points at the recovery.
+            self.tray.notify("Couldn't paste — your text is saved in History.")
         t_end = time.monotonic()
         log.info(
             "timing: stop->transcribed %.0fms transcribed->paste %.0fms paste %.0fms total %.0fms",
