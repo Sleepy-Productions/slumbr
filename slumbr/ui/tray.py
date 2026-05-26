@@ -126,11 +126,6 @@ class SlumbrTray:
                 checked=lambda _item: self._config.mic_routing_enabled,
             ),
             pystray.MenuItem(
-                "Reverse PTT (Discord)",
-                lambda _icon, _item: self._on_quick_toggle("reverse_ptt_enabled"),
-                checked=lambda _item: self._config.reverse_ptt_enabled,
-            ),
-            pystray.MenuItem(
                 "Compact popup",
                 lambda _icon, _item: self._on_quick_toggle("compact_popup"),
                 checked=lambda _item: self._config.compact_popup,

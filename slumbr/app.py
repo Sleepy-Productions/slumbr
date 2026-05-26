@@ -462,6 +462,14 @@ class SlumbrApp:
         dlg.raise_()
         dlg.activateWindow()
 
+    def _open_settings_maximized(self) -> None:
+        """Open Settings maximized — used on launch so the window is front and
+        center, instead of Slumbr starting silently into just a tray icon."""
+        dlg = self._ensure_settings_dialog()
+        dlg.showMaximized()
+        dlg.raise_()
+        dlg.activateWindow()
+
     def _build_app_icon(self) -> QIcon | None:
         """Window/taskbar icon: the FIXED monochrome moon-v2 brand mark — the
         symbol stays black-and-white, it doesn't follow the accent. Falls back
@@ -709,8 +717,7 @@ class SlumbrApp:
         self.qapp.quit()
 
     def run(self) -> int:
-        if self._show_settings_on_first_run:
-            # First launch: open Settings shortly after boot so a new user sees
-            # what's tunable. 800 ms lets the tray + model-load settle first.
-            QTimer.singleShot(800, self._on_open_settings)
+        # Surface Settings (maximized) shortly after boot so launching Slumbr
+        # always shows a window, not just a tray icon. 800 ms lets boot settle.
+        QTimer.singleShot(800, self._open_settings_maximized)
         return self.qapp.exec()
