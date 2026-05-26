@@ -1,7 +1,7 @@
 <h1 align="center">Slumbr</h1>
 
 <p align="center">
-  <img src="screenshots/hero.png" alt="Slumbr — local, offline voice-to-text dictation for Windows" width="860">
+  <img src="screenshots/hero.png" alt="Slumbr — local, offline voice-to-text dictation for Windows" width="100%">
 </p>
 
 <p align="center">
