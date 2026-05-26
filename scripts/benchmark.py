@@ -264,6 +264,58 @@ def cmd_run(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_sweep(args: argparse.Namespace) -> int:
+    """Vary one decode knob on a single model and chart WER vs speed.
+
+    Currently sweeps ``beam_size`` (the classic accuracy/latency dial) on a
+    faster-whisper model, reusing one model load. This is the "configure it
+    to make it better" loop: find the setting that lifts accuracy for an
+    acceptable speed cost, then bake it in.
+    """
+    from slumbr.stt.engine import WhisperEngine  # noqa: PLC0415
+
+    data_dir = Path(args.data) if args.data else DATA_DIR
+    clips = _load_clips(data_dir)
+    if not clips:
+        print(f"No clips in {data_dir}. Run 'record' first (or drop in wav+txt pairs).")
+        return 1
+    beams = [int(b) for b in args.beams.split(",")]
+    print(f"Sweeping beam_size {beams} on {args.model} ({args.device}/{args.compute}) "
+          f"over {len(clips)} clips\n")
+    eng = WhisperEngine(
+        model_size=args.model, device=args.device, compute_type=args.compute,
+        language="en", initial_prompt="",
+    )
+    eng.warm_up()
+
+    rows: list[dict] = []
+    for beam in beams:
+        wers: list[float] = []
+        rtfs: list[float] = []
+        for _name, audio, ref in clips:
+            audio_s = max(len(audio) / SAMPLE_RATE, 1e-6)
+            t0 = time.monotonic()
+            hyp = eng._run(audio, beam_size=beam)  # noqa: SLF001
+            dt = time.monotonic() - t0
+            wers.append(_wer(_normalize(ref), _normalize(hyp)))
+            rtfs.append(dt / audio_s)
+        wer = float(np.mean(wers)) * 100
+        rtf = float(np.mean(rtfs))
+        rows.append({"beam_size": beam, "avg_wer_pct": round(wer, 2), "avg_rtf": round(rtf, 3)})
+        print(f"  beam {beam:>2}: WER {wer:5.1f}%   RTF {rtf:.3f}")
+
+    print("\n" + "=" * 44)
+    print(f"{'beam_size':>9} {'avg WER':>10} {'avg RTF':>10}")
+    print("-" * 44)
+    for r in rows:
+        print(f"{r['beam_size']:>9} {r['avg_wer_pct']:>9.1f}% {r['avg_rtf']:>10.3f}")
+    print("=" * 44)
+    out = data_dir / f"sweep_{args.model.replace('/', '_')}.json"
+    out.write_text(json.dumps(rows, indent=2), encoding="utf-8")
+    print(f"Wrote {out}")
+    return 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="Slumbr accuracy/speed benchmark.")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -271,9 +323,17 @@ def main() -> int:
     run = sub.add_parser("run", help="measure WER + RTF across configs")
     run.add_argument("--only", help="comma-separated config labels to run (default: all)")
     run.add_argument("--data", help="clip directory (default: scripts/benchmark_data)")
+    sw = sub.add_parser("sweep", help="vary beam_size on one model to tune accuracy/speed")
+    sw.add_argument("--model", default="large-v3-turbo", help="faster-whisper model")
+    sw.add_argument("--beams", default="1,5,10", help="comma-separated beam sizes")
+    sw.add_argument("--device", default="cuda", help="cuda | cpu")
+    sw.add_argument("--compute", default="int8_float16", help="compute_type")
+    sw.add_argument("--data", help="clip directory (default: scripts/benchmark_data)")
     args = ap.parse_args()
     if args.cmd == "record":
         return cmd_record(args)
+    if args.cmd == "sweep":
+        return cmd_sweep(args)
     return cmd_run(args)
 
 
