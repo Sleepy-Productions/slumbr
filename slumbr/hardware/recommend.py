@@ -121,14 +121,45 @@ def backend_options(profile: HardwareProfile) -> list[Option]:
     return [Option("recommended", "moonshine", "Moonshine · CPU — snappy, fully local.")]
 
 
+# CUDA Whisper model ladder, heaviest→lightest. ``large-v3-turbo`` is the
+# top pick (within ~1% WER of large-v3 but ~3x faster — the right call for
+# seamless dictation), so plain ``large-v3`` is intentionally not offered.
+_CUDA_LADDER: tuple[str, ...] = ("large-v3-turbo", "medium", "small", "base")
+_CUDA_NOTES: dict[str, str] = {
+    "large-v3-turbo": "Fast + near-best accuracy. The seamless default.",
+    "medium": "More accurate than small, moderate VRAM.",
+    "small": "Fast, low memory.",
+    "base": "Smallest footprint — for low-VRAM cards.",
+}
+_TIER_KEYS: tuple[str, ...] = ("recommended", "balanced", "light")
+
+
+def _cuda_ladder_start(vram_gb: float) -> int:
+    """Index into ``_CUDA_LADDER`` of the heaviest model that fits the card.
+    Conservative: a model offered here must actually load + decode without
+    OOM, since the Engine tab lets the user pick the "Recommended" tier
+    blind. Unknown VRAM (0) is treated as small-class to stay safe."""
+    if vram_gb >= 7.5:
+        return 0  # turbo
+    if vram_gb >= 5:
+        return 1  # medium
+    if vram_gb >= 3:
+        return 2  # small
+    if vram_gb <= 0:
+        return 2  # unknown — small is the safe, still-capable default
+    return 3      # base (tiny cards)
+
+
 def model_options(backend_name: str, profile: HardwareProfile) -> list[Option]:
-    """Tiered model picks for a given backend + hardware."""
+    """Tiered model picks for a given backend + hardware. The CUDA ladder is
+    VRAM-scaled so a small card never offers a model it can't run."""
     gpu = profile.best_gpu
     if backend_name == "cuda_ct2":
+        vram = gpu.vram_gb if gpu else 0.0
+        ladder = _CUDA_LADDER[_cuda_ladder_start(vram):] or (_CUDA_LADDER[-1],)
         return [
-            Option("recommended", "large-v3-turbo", "Fast + near-best accuracy. The seamless default."),
-            Option("balanced", "medium", "Lighter, lower VRAM, still solid."),
-            Option("light", "small", "Fastest, tiniest footprint."),
+            Option(_TIER_KEYS[min(i, 2)], model, _CUDA_NOTES[model])
+            for i, model in enumerate(ladder[:3])
         ]
     if backend_name == "directml":
         strong = gpu is not None and gpu.is_discrete and gpu.vram_gb >= 7.5
@@ -275,20 +306,13 @@ def recommend(profile: HardwareProfile, *, phase1_only: bool = False) -> Recomme
 
 
 def _whisper_model_for_vram(vram_bytes: int) -> str:
-    """Pick the largest Whisper model that comfortably fits."""
-    gb = vram_bytes / (1024**3)
-    if gb == 0:
-        # VRAM unknown — pick the safe middle option.
-        return "small"
-    if gb >= 14:
-        return "large-v3"
-    if gb >= 7.5:
-        return "large-v3-turbo"
-    if gb >= 5.5:
-        return "small"
-    if gb >= 3.5:
-        return "small"
-    return "base"
+    """Pick the seamless-best Whisper model that comfortably fits. Capped at
+    ``large-v3-turbo`` (not plain large-v3): turbo is within ~1% WER but ~3x
+    faster, which matters more for live dictation — and it keeps recommend()
+    in lockstep with the Engine tab's VRAM-scaled model tiers (the
+    ``_CUDA_LADDER``), so the default and the "Recommended" card never
+    disagree."""
+    return _CUDA_LADDER[_cuda_ladder_start(vram_bytes / (1024**3))]
 
 
 def _ct2_compute_type_for_vram(vram_bytes: int) -> str:
