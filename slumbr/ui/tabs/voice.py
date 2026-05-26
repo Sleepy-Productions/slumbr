@@ -8,7 +8,13 @@ from __future__ import annotations
 
 import sounddevice as sd
 from PySide6.QtCore import Signal
-from PySide6.QtWidgets import QComboBox, QPlainTextEdit, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (
+    QCheckBox,
+    QComboBox,
+    QPlainTextEdit,
+    QVBoxLayout,
+    QWidget,
+)
 
 from ...config import SlumbrConfig
 from ._widgets import field_hint, field_label, heading, scrollable, subheading
@@ -22,6 +28,30 @@ def _list_input_devices() -> list[tuple[int, str]]:
                 out.append((i, d["name"]))
     except Exception:  # noqa: BLE001
         pass
+    return out
+
+
+def _format_replacements(d: dict[str, str]) -> str:
+    """Render the {heard: corrected} map as editable 'heard => corrected' lines."""
+    return "\n".join(f"{k} => {v}" for k, v in d.items())
+
+
+def _parse_replacements(text: str) -> dict[str, str]:
+    """Parse 'heard => corrected' (or '->') lines back into a map. Malformed
+    lines are skipped silently so a half-typed entry never breaks the rest.
+    """
+    out: dict[str, str] = {}
+    for line in text.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        for sep in ("=>", "->"):
+            if sep in line:
+                left, right = line.split(sep, 1)
+                left, right = left.strip(), right.strip()
+                if left and right:
+                    out[left] = right
+                break
     return out
 
 
@@ -98,6 +128,29 @@ class VoiceTab(QWidget):
         self._prompt_edit.textChanged.connect(self._on_changed)
         layout.addWidget(self._prompt_edit)
 
+        # Auto-corrections (find-replace, every backend)
+        layout.addWidget(field_label("Auto-corrections"))
+        layout.addWidget(
+            field_hint(
+                "Fix mishears Slumbr makes the same way every time. One per line, "
+                "format: heard => corrected (e.g. keybinde => keybinds). Whole-word, "
+                "case-insensitive, applied to every backend before paste."
+            )
+        )
+        self._repl_edit = QPlainTextEdit()
+        self._repl_edit.setPlainText(_format_replacements(config.word_replacements))
+        self._repl_edit.setPlaceholderText("keybinde => keybinds\nslumber => Slumbr")
+        self._repl_edit.setFixedHeight(90)
+        self._repl_edit.textChanged.connect(self._on_changed)
+        layout.addWidget(self._repl_edit)
+
+        self._strip_filler = QCheckBox(
+            "Remove trailing “thank you” / “thanks for watching” hallucinations"
+        )
+        self._strip_filler.setChecked(config.strip_trailing_filler)
+        self._strip_filler.stateChanged.connect(self._on_changed)
+        layout.addWidget(self._strip_filler)
+
         layout.addStretch(1)
 
         outer = QVBoxLayout(self)
@@ -109,4 +162,6 @@ class VoiceTab(QWidget):
         lang = self._language_combo.currentData()
         self._config.language = lang if lang is not None else ""
         self._config.initial_prompt = self._prompt_edit.toPlainText().strip()
+        self._config.word_replacements = _parse_replacements(self._repl_edit.toPlainText())
+        self._config.strip_trailing_filler = self._strip_filler.isChecked()
         self.config_changed.emit()

@@ -2,13 +2,13 @@
 
 Replaces the "last transcript" surface that used to live on the deleted
 ``HomePanel``. The tray menu shows the latest entry as a non-clickable
-header item; the Settings dialog's History tab shows the last 50.
+header item; the Settings dialog's History tab shows the last 30.
 
 Why a ring buffer instead of unbounded log: dictation produces 50–200
 entries per heavy session. Unbounded growth would let history.jsonl
 balloon to MB-scale over time with no value — users care about "what
-did I just dictate" not "what did I dictate in March." 50 entries is
-enough to find the one you accidentally pasted into the wrong app.
+did I just dictate" not "what did I dictate in March." The buffer keeps
+the most recent ``MAX_ENTRIES`` and auto-drops anything older.
 
 Privacy: history stays on disk in plaintext like everything else local.
 The Settings dialog has a "Clear history" button. No telemetry.
@@ -33,7 +33,7 @@ def _history_path() -> Path:
 
 
 HISTORY_PATH = _history_path()
-MAX_ENTRIES = 50
+MAX_ENTRIES = 30
 
 
 @dataclass

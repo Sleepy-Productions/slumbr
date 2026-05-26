@@ -32,6 +32,159 @@ class Recommendation:
     reason: str = ""  # one-line human description, shown under the card
 
 
+@dataclass
+class Option:
+    """One pick within a Settings → Engine dimension (backend / model /
+    precision). Each dimension is tiered independently so the user can mix
+    a high model with a light backend, etc. ``key`` is the tier slot;
+    ``value`` is what gets written to ``BackendConfig``.
+    """
+
+    key: str       # "recommended" | "balanced" | "light"
+    value: str     # backend name, model id, or compute_type string
+    note: str      # one-line descriptor shown under the value
+
+
+# Display text for each tier key (kept uniform across all three dimensions).
+TIER_LABELS: dict[str, str] = {
+    "recommended": "Recommended",
+    "balanced": "Balanced",
+    "light": "Light",
+}
+
+
+def hardware_summary(profile: HardwareProfile) -> tuple[str, str]:
+    """Return ``(hardware_label, why)`` for the Engine panel header."""
+    gpu = profile.best_gpu
+    label = _hardware_label(profile)
+    cpu_note = " Your CPU runs the live preview + punctuation in parallel."
+    if gpu is not None and gpu.vendor == GpuVendor.NVIDIA and gpu.is_discrete:
+        why = (
+            f"GPU + CPU: the {_short_name(gpu.name)} (CUDA) does the final transcribe — "
+            f"fastest, most accurate, sized to your {gpu.vram_gb:.0f} GB of VRAM.{cpu_note}"
+        )
+    elif gpu is not None and gpu.vendor in (GpuVendor.AMD, GpuVendor.INTEL):
+        vendor = "AMD Radeon" if gpu.vendor == GpuVendor.AMD else "Intel"
+        why = (
+            f"GPU + CPU: your {vendor} (DirectML, DX12, zero-config) does the final "
+            f"transcribe.{cpu_note}"
+        )
+    else:
+        why = "CPU only — Moonshine runs snappily on your processor (no GPU path detected)."
+    return label, why
+
+
+def hardware_rows(profile: HardwareProfile) -> list[tuple[str, str, str]]:
+    """Detected-hardware rows for the Engine header: ``(dimension, value,
+    role)``. Always surfaces BOTH the GPU (when one is present) and the CPU,
+    each on its own line with the job it does — so it's unmistakable that
+    Slumbr detected the CPU too, not just the obvious GPU.
+    """
+    rows: list[tuple[str, str, str]] = []
+    gpu = profile.best_gpu
+
+    if gpu is not None and gpu.vendor == GpuVendor.NVIDIA and gpu.is_discrete:
+        rows.append(("GPU", _gpu_value(gpu), "CUDA · final transcribe"))
+    elif gpu is not None and gpu.vendor in (GpuVendor.AMD, GpuVendor.INTEL):
+        rows.append(("GPU", _gpu_value(gpu), "DirectML (DX12) · final transcribe"))
+
+    cpu = _short_name(profile.cpu_brand) if profile.cpu_brand else "Detected (name unavailable)"
+    if rows:  # a GPU does the heavy lifting → CPU runs the live layer
+        rows.append(("CPU", cpu, "Live preview · VAD · punctuation"))
+    else:     # CPU-only machine → CPU does everything
+        rows.append(("CPU", cpu, "Moonshine · final transcribe + live preview"))
+    return rows
+
+
+def _gpu_value(gpu: GpuInfo) -> str:
+    val = _short_name(gpu.name)
+    if gpu.vram_gb >= 1:
+        val += f" · {gpu.vram_gb:.0f} GB"
+    return val
+
+
+def backend_options(profile: HardwareProfile) -> list[Option]:
+    """Tiered backend picks for the detected hardware (heaviest → lightest)."""
+    gpu = profile.best_gpu
+    if gpu is not None and gpu.vendor == GpuVendor.NVIDIA and gpu.is_discrete:
+        return [
+            Option("recommended", "cuda_ct2", "Faster-Whisper · CUDA — fastest on your NVIDIA GPU."),
+            Option("balanced", "directml", "DirectML · DX12 — vendor-neutral GPU path."),
+            Option("light", "moonshine", "Moonshine · CPU — no GPU load, very snappy."),
+        ]
+    if gpu is not None and gpu.vendor in (GpuVendor.AMD, GpuVendor.INTEL):
+        gpu_word = "Radeon" if gpu.vendor == GpuVendor.AMD else "Arc / Xe"
+        return [
+            Option("recommended", "directml", f"DirectML · DX12 — your {gpu_word} GPU."),
+            Option("light", "moonshine", "Moonshine · CPU — no GPU load."),
+        ]
+    return [Option("recommended", "moonshine", "Moonshine · CPU — snappy, fully local.")]
+
+
+def model_options(backend_name: str, profile: HardwareProfile) -> list[Option]:
+    """Tiered model picks for a given backend + hardware."""
+    gpu = profile.best_gpu
+    if backend_name == "cuda_ct2":
+        return [
+            Option("recommended", "large-v3-turbo", "Fast + near-best accuracy. The seamless default."),
+            Option("balanced", "medium", "Lighter, lower VRAM, still solid."),
+            Option("light", "small", "Fastest, tiniest footprint."),
+        ]
+    if backend_name == "directml":
+        strong = gpu is not None and gpu.is_discrete and gpu.vram_gb >= 7.5
+        if strong:
+            return [
+                Option("recommended", "large-v3-turbo", "Fastest large-class accuracy on your GPU."),
+                Option("balanced", "medium", "More accurate, a bit heavier."),
+                Option("light", "small", "Fastest, lowest memory."),
+            ]
+        return [
+            Option("recommended", "small", "The sweet spot for this GPU's throughput."),
+            Option("balanced", "medium", "More accurate, heavier."),
+        ]
+    if backend_name == "moonshine":
+        return [
+            Option("recommended", "moonshine-base-en-int8", "Most accurate CPU model (~180 MB)."),
+            Option("light", "moonshine-tiny-en-int8", "Fastest, ~80 MB."),
+        ]
+    # whisper.cpp variants are still stubs — single placeholder.
+    return [Option("recommended", "small.en-q5_k_m", "whisper.cpp small (q5_k_m).")]
+
+
+def compute_options(backend_name: str) -> list[Option]:
+    """Tiered compute-precision picks. Only ``cuda_ct2`` exposes this knob;
+    every other backend bakes precision into the model, so the row is empty
+    (the UI hides it).
+    """
+    if backend_name != "cuda_ct2":
+        return []
+    return [
+        Option("recommended", "int8_float16", "Best accuracy/speed balance."),
+        Option("balanced", "float16", "Most accurate, more VRAM."),
+        Option("light", "int8", "Smallest VRAM footprint."),
+    ]
+
+
+def thread_budget(profile: HardwareProfile) -> int:
+    """Public wrapper so the UI can size Moonshine threads when the user
+    switches to a CPU backend mid-session."""
+    return max(2, min(8, _cpu_thread_budget(profile)))
+
+
+def _hardware_label(profile: HardwareProfile) -> str:
+    """Compact one-liner: GPU (+VRAM) · CPU, for the panel header."""
+    parts: list[str] = []
+    gpu = profile.best_gpu
+    if gpu is not None:
+        g = _short_name(gpu.name)
+        if gpu.vram_gb >= 1:
+            g += f" · {gpu.vram_gb:.0f} GB"
+        parts.append(g)
+    if profile.cpu_brand:
+        parts.append(_short_name(profile.cpu_brand))
+    return "  ·  ".join(parts) if parts else "Hardware unknown"
+
+
 def recommend(profile: HardwareProfile, *, phase1_only: bool = False) -> Recommendation:
     """Pick a backend for this machine.
 
@@ -195,8 +348,10 @@ def _short_name(name: str) -> str:
         if name.startswith(stripped):
             name = name[len(stripped):]
             break
-    # Trim trailing fluff like "(R)", "Graphics", "Laptop GPU".
-    for tail in (" Laptop GPU", " Graphics", "(R)", "(TM)"):
+    # Drop registered/trademark marks wherever they sit ("Core(TM) i9" →
+    # "Core i9"), then trailing fluff, then collapse any double spaces.
+    name = name.replace("(R)", "").replace("(TM)", "")
+    for tail in (" Laptop GPU", " Graphics"):
         if name.endswith(tail):
             name = name[: -len(tail)].rstrip()
-    return name
+    return " ".join(name.split())

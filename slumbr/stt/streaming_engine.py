@@ -98,9 +98,13 @@ SAMPLE_RATE = 16000
 
 _MODELS_ROOT = Path(os.path.expandvars(r"%APPDATA%\Slumbr\models"))
 
-# --- Moonshine base int8 (HuggingFace) -----------------------------------
-_MOONSHINE_DIR = _MODELS_ROOT / "moonshine-base-en"
-_MOONSHINE_HF = "csukuangfj/sherpa-onnx-moonshine-base-en-int8"
+# --- Moonshine int8 ONNX bundles (HuggingFace, sherpa-onnx zoo) ----------
+# Two variants ship in the sherpa-onnx zoo: base (accurate, ~180 MB) and
+# tiny (fastest, ~80 MB). sherpa-onnx has NO small/medium Moonshine
+# bundle (verified 2026-05-25 — the landscape doc's "Moonshine Medium"
+# was wrong). Both bundles expose the identical 5-file layout, so only
+# the repo + local cache dir differ. Streaming partials always use base;
+# the CPU primary backend lets the user pick either (backends/moonshine.py).
 _MOONSHINE_FILES = [
     "preprocess.onnx",
     "encode.int8.onnx",
@@ -108,6 +112,12 @@ _MOONSHINE_FILES = [
     "uncached_decode.int8.onnx",
     "tokens.txt",
 ]
+_MOONSHINE_VARIANTS: dict[str, tuple[str, Path]] = {
+    "base": ("csukuangfj/sherpa-onnx-moonshine-base-en-int8", _MODELS_ROOT / "moonshine-base-en"),
+    "tiny": ("csukuangfj/sherpa-onnx-moonshine-tiny-en-int8", _MODELS_ROOT / "moonshine-tiny-en"),
+}
+# Back-compat aliases — base is the default wherever a variant isn't given.
+_MOONSHINE_HF, _MOONSHINE_DIR = _MOONSHINE_VARIANTS["base"]
 
 # --- Silero VAD (raw GitHub) ---------------------------------------------
 _VAD_DIR = _MODELS_ROOT / "silero-vad"
@@ -149,24 +159,32 @@ def _download_url(url: str, dest: Path) -> None:
     tmp.replace(dest)
 
 
-def _ensure_moonshine() -> dict[str, str]:
-    """Download Moonshine base int8 ONNX files from HF if missing."""
-    if all((_MOONSHINE_DIR / f).is_file() for f in _MOONSHINE_FILES):
-        return {f: str(_MOONSHINE_DIR / f) for f in _MOONSHINE_FILES}
+def _ensure_moonshine(variant: str = "base") -> dict[str, str]:
+    """Download a Moonshine int8 ONNX bundle from HF if missing.
 
-    log.info("downloading Moonshine base int8 (~180 MB) to %s", _MOONSHINE_DIR)
-    _MOONSHINE_DIR.mkdir(parents=True, exist_ok=True)
+    ``variant`` is "base" (default, accurate ~180 MB) or "tiny" (fastest
+    ~80 MB). Both share the same 5-file layout; only the repo + cache dir
+    differ. Unknown variants fall back to base rather than failing.
+    """
+    repo, mdir = _MOONSHINE_VARIANTS.get(variant, _MOONSHINE_VARIANTS["base"])
+    if all((mdir / f).is_file() for f in _MOONSHINE_FILES):
+        return {f: str(mdir / f) for f in _MOONSHINE_FILES}
+
+    log.info("downloading Moonshine %s int8 to %s", variant, mdir)
+    mdir.mkdir(parents=True, exist_ok=True)
     from huggingface_hub import snapshot_download
 
     snapshot_download(
-        repo_id=_MOONSHINE_HF,
-        local_dir=str(_MOONSHINE_DIR),
+        repo_id=repo,
+        local_dir=str(mdir),
         allow_patterns=_MOONSHINE_FILES,
     )
-    missing = [f for f in _MOONSHINE_FILES if not (_MOONSHINE_DIR / f).is_file()]
+    missing = [f for f in _MOONSHINE_FILES if not (mdir / f).is_file()]
     if missing:
-        raise ModelDownloadError(f"Moonshine files missing after download: {missing}")
-    return {f: str(_MOONSHINE_DIR / f) for f in _MOONSHINE_FILES}
+        raise ModelDownloadError(
+            f"Moonshine {variant} files missing after download: {missing}"
+        )
+    return {f: str(mdir / f) for f in _MOONSHINE_FILES}
 
 
 def _ensure_vad() -> str:

@@ -20,7 +20,6 @@ from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QDialog, QTabWidget, QVBoxLayout
 
 from ..config import SlumbrConfig
-from ..input.keymap import vk_label
 from ..theme import (
     BG_DARK,
     BG_PANEL,
@@ -178,8 +177,9 @@ class SettingsDialog(QDialog):
         *,
         config: SlumbrConfig,
         on_config_changed: Callable[[], None],
-        on_hotkey_changed: Callable[[int], None],
+        on_hotkey_changed: Callable[[list[int]], None],
         on_quit: Callable[[], None],
+        on_restart: Callable[[], None],
         app_icon: QIcon | None = None,
     ) -> None:
         super().__init__()
@@ -187,6 +187,7 @@ class SettingsDialog(QDialog):
         self._on_config_changed = on_config_changed
         self._on_hotkey_changed = on_hotkey_changed
         self._on_quit = on_quit
+        self._on_restart = on_restart
 
         self.setWindowTitle("Slumbr — Settings")
         # No "?" help button in the title bar; it doesn't do anything.
@@ -228,6 +229,7 @@ class SettingsDialog(QDialog):
         self._behavior_tab.config_changed.connect(self._handle_config_changed)
         self._shortcuts_tab.hotkey_changed.connect(self._handle_hotkey_changed)
         self._about_tab.quit_requested.connect(self._handle_quit)
+        self._about_tab.restart_requested.connect(self._handle_restart)
         # Refresh history each time the user opens the History tab so
         # entries dictated between opens show up without reopening the
         # dialog.
@@ -238,29 +240,33 @@ class SettingsDialog(QDialog):
     def jump_to_engine(self) -> None:
         self._tabs.setCurrentWidget(self._engine_tab)
 
-    def reflect_hotkey(self, vk: int) -> None:
+    def reflect_hotkey(self, vks: list[int]) -> None:
         """Sync the picker when the hotkey was changed from elsewhere
-        (e.g. the wizard, future scripting hooks). Not used in Phase 1
-        but harmless to expose.
+        (e.g. the wizard, future scripting hooks).
         """
-        self._shortcuts_tab.set_hotkey(vk)
+        self._shortcuts_tab.set_hotkey(vks)
 
     # ----------------------------------------------------- handlers
 
     def _handle_config_changed(self) -> None:
         self._on_config_changed()
 
-    def _handle_hotkey_changed(self, vk: int) -> None:
-        self._config.hotkey_vk = vk
-        self._on_hotkey_changed(vk)
-        self._on_config_changed()
-        # Update the Voice tab's hotkey pill if it shows one — not in
-        # the current schema, but documented as a hook.
-        _ = vk_label  # silence unused-import lint when the helper isn't called
+    def _handle_hotkey_changed(self, vks: list[int]) -> None:
+        # The app callback owns persistence + the live rebind + tray label
+        # (it writes both ``hotkey_vks`` and the legacy ``hotkey_vk``). A
+        # hotkey change is independent of the device/mic reconcile that
+        # ``_on_config_changed`` does, so we don't fire that here.
+        self._on_hotkey_changed(vks)
 
     def _handle_quit(self) -> None:
         self.accept()
         self._on_quit()
+
+    def _handle_restart(self) -> None:
+        # The app callback spawns a fresh Slumbr then tears this one down;
+        # close the dialog first so it doesn't flash during the handoff.
+        self.accept()
+        self._on_restart()
 
     def _on_tab_changed(self, index: int) -> None:
         if self._tabs.widget(index) is self._history_tab:
