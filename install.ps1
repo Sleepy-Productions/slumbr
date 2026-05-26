@@ -166,8 +166,17 @@ if (-not (Test-Path $ICON_PATH)) { Fail "icon build reported success but $ICON_P
 # so it never reads as "Python". (Python doesn't care about its exe filename.)
 Write-Step "Creating Slumbr.exe launcher (so it runs + pins as Slumbr, not Python)"
 Copy-Item $VENV_PYW $VENV_SLUMBR -Force
-if (Test-Path $VENV_SLUMBR) { Write-Ok "Slumbr.exe ready" }
-else { Write-Warn2 "couldn't create Slumbr.exe — the shortcut will fall back to pythonw.exe" }
+if (Test-Path $VENV_SLUMBR) {
+    Write-Ok "Slumbr.exe ready"
+    # The copy still carries pythonw's embedded identity (FileDescription
+    # "Python" + Python's icon) — which is what the taskbar pin reads. Rewrite
+    # the version resource + icon to Slumbr (pywin32-native, no external tool).
+    $ver = (Select-String -Path (Join-Path $ROOT 'pyproject.toml') -Pattern '^version = "([^"]+)"').Matches.Groups[1].Value
+    & $VENV_PY (Join-Path $ROOT 'scripts\brand_launcher.py') $VENV_SLUMBR $ICON_PATH $ver | Out-Host
+    if ($LASTEXITCODE -ne 0) { Write-Warn2 "launcher branding failed (non-fatal — still runs, but may pin as Python)" }
+} else {
+    Write-Warn2 "couldn't create Slumbr.exe — the shortcut will fall back to pythonw.exe"
+}
 
 # ----------------------------------------------------------------- shortcut
 if ($NoShortcut) {
