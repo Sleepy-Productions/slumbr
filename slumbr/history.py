@@ -1,14 +1,15 @@
-"""Transcript history — small ring-buffered jsonl at ``%APPDATA%\\Slumbr\\history.jsonl``.
+"""Transcript history — the current *partial* batch, at ``%APPDATA%\\Slumbr\\history.jsonl``.
 
 Replaces the "last transcript" surface that used to live on the deleted
 ``HomePanel``. The tray menu shows the latest entry as a non-clickable
-header item; the Settings dialog's History tab shows the last 30.
+header item; the Settings dialog's History tab shows this live batch.
 
-Why a ring buffer instead of unbounded log: dictation produces 50–200
-entries per heavy session. Unbounded growth would let history.jsonl
-balloon to MB-scale over time with no value — users care about "what
-did I just dictate" not "what did I dictate in March." The buffer keeps
-the most recent ``MAX_ENTRIES`` and auto-drops anything older.
+This holds at most ``MAX_ENTRIES`` transcripts — the live view. When it
+fills, the full batch *rolls* into a temporary session log (see
+``session_logs.py``) and the live view resets to fresh, so the History tab
+never grows past ``MAX_ENTRIES`` and you get a clean slate. The rolled
+batches stay recoverable from "Session logs" until Slumbr closes. History
+itself is session-scoped: ``app.py`` clears it on a clean launch.
 
 Privacy: history stays on disk in plaintext like everything else local.
 The Settings dialog has a "Clear history" button. No telemetry.
@@ -22,6 +23,8 @@ import os
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
+
+from . import session_logs
 
 log = logging.getLogger(__name__)
 
@@ -76,20 +79,31 @@ def latest() -> str:
 
 
 def append(text: str) -> None:
-    """Append a transcript and trim to the last ``MAX_ENTRIES``.
+    """Append a transcript to the live batch.
 
-    Empty / whitespace-only inputs are ignored (don't pollute history
-    with debouncer artifacts from accidental hotkey taps).
+    When the live batch is already full, the whole thing rolls into a session
+    log and the view resets — so this new transcript becomes ``1 / MAX_ENTRIES``
+    of a fresh batch and the rolled 30 stay recoverable from Session logs.
+
+    Empty / whitespace-only inputs are ignored (don't pollute history with
+    debouncer artifacts from accidental hotkey taps).
     """
     text = text.strip()
     if not text:
         return
 
     entries = load_all()
+    if len(entries) >= MAX_ENTRIES:
+        # Full — archive this batch and start fresh. The live view never
+        # exceeds MAX_ENTRIES; the rolled batch is recoverable via Session logs.
+        session_logs.roll_batch(entries)
+        entries = []
     entries.append(HistoryEntry(text=text, ts=time.time()))
-    if len(entries) > MAX_ENTRIES:
-        entries = entries[-MAX_ENTRIES:]
+    _write(entries)
 
+
+def _write(entries: list[HistoryEntry]) -> None:
+    """Atomically (temp + os.replace) rewrite the live batch file."""
     HISTORY_PATH.parent.mkdir(parents=True, exist_ok=True)
     tmp = HISTORY_PATH.with_suffix(".jsonl.tmp")
     try:

@@ -1,7 +1,17 @@
-"""History tab — last 30 transcripts with timestamps.
+"""History tab — the live transcript batch + a drill-in for session logs.
 
-Replaces the "Last transcript" surface the old HomePanel owned. Entries
-live at ``%APPDATA%\\Slumbr\\history.jsonl`` (see ``slumbr/history.py``).
+Three views in one tab (a QStackedWidget), so the fallback never feels clunky:
+
+  1. Live    — this session's current batch (< ``history.MAX_ENTRIES``). At the
+               cap it rolls into a session log and resets to fresh.
+  2. Logs    — "Session logs (N)": the rolled-off batches, one row each. They're
+               temporary (deleted when Slumbr closes) and exist as a safety net
+               for "the list auto-cleared and I needed that one".
+  3. Detail  — one log's transcripts, opened from the Logs list (one at a time,
+               not all dumped at once).
+
+Live entries live at ``%APPDATA%\\Slumbr\\history.jsonl``; rolled batches under
+``%APPDATA%\\Slumbr\\session\\`` (see ``slumbr/history.py`` + ``session_logs.py``).
 """
 
 from __future__ import annotations
@@ -19,6 +29,7 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QMenu,
     QPushButton,
+    QStackedWidget,
     QStyle,
     QStyledItemDelegate,
     QToolTip,
@@ -26,20 +37,31 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ... import history
+from ... import history, session_logs
 from ...theme import BG_PANEL, BG_PANEL_HI, BORDER, TEXT_PRIMARY, TEXT_SECONDARY
-from ._widgets import heading, scrollable, subheading, tag
+from ._widgets import heading, subheading, tag
 
 # Per-item data roles: the delegate paints the timestamp + transcript in two
 # different styles, so we stash them separately instead of one display string.
 _TS_ROLE = Qt.UserRole + 1
 _TEXT_ROLE = Qt.UserRole + 2
+_INDEX_ROLE = Qt.UserRole + 3  # batch index, on Session-logs rows
+
+_LIST_QSS = f"""
+QListWidget {{
+    background: {BG_PANEL};
+    border: 1px solid {BORDER};
+    border-radius: 12px;
+    padding: 8px;
+    outline: 0;
+}}
+"""
 
 
 class _HistoryDelegate(QStyledItemDelegate):
-    """Paints each history row as a dim monospace timestamp + the transcript
-    in primary text, with the transcript elided to the row width. Reads much
-    cleaner than one flat ``"13:42   text"`` string and never wraps oddly."""
+    """Paints each transcript row as a dim monospace timestamp + the transcript
+    in primary text, elided to the row width. Reads cleaner than one flat
+    ``"13:42   text"`` string and never wraps oddly."""
 
     PAD_X = 14
     TS_W = 80
@@ -71,9 +93,7 @@ class _HistoryDelegate(QStyledItemDelegate):
         painter.setPen(QColor(TEXT_PRIMARY))
         bx = rect.left() + self.PAD_X + self.TS_W + self.GAP
         body_rect = QRect(bx, rect.top(), rect.right() - bx - self.PAD_X, rect.height())
-        elided = QFontMetrics(body_font).elidedText(
-            text, Qt.ElideRight, body_rect.width()
-        )
+        elided = QFontMetrics(body_font).elidedText(text, Qt.ElideRight, body_rect.width())
         painter.drawText(body_rect, Qt.AlignLeft | Qt.AlignVCenter, elided)
         painter.restore()
 
@@ -86,21 +106,44 @@ class HistoryTab(QWidget):
 
     def __init__(self) -> None:
         super().__init__()
-        body = QWidget()
-        layout = QVBoxLayout(body)
-        layout.setContentsMargins(48, 40, 48, 40)
-        layout.setSpacing(20)
+        self._stack = QStackedWidget()
+        self._stack.addWidget(self._build_live_page())     # 0
+        self._stack.addWidget(self._build_logs_page())      # 1
+        self._stack.addWidget(self._build_detail_page())    # 2
 
-        # Header row with title + clear button
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.addWidget(self._stack)
+
+        self.refresh()
+
+    # ----------------------------------------------------------- page builds
+
+    def _page(self) -> tuple[QWidget, QVBoxLayout]:
+        w = QWidget()
+        lay = QVBoxLayout(w)
+        lay.setContentsMargins(48, 40, 48, 40)
+        lay.setSpacing(20)
+        return w, lay
+
+    def _build_live_page(self) -> QWidget:
+        page, layout = self._page()
+
         header_row = QHBoxLayout()
         header_row.setSpacing(12)
-        title = heading("History", size=28)
-        header_row.addWidget(title)
+        header_row.addWidget(heading("History", size=28))
         header_row.addStretch(1)
         self._count_tag = tag("0")
         header_row.addWidget(self._count_tag)
+        self._logs_btn = QPushButton("Session logs")
+        self._logs_btn.setToolTip(
+            "Earlier transcripts that rolled off this session.\n"
+            "Temporary — kept until you close Slumbr."
+        )
+        self._logs_btn.clicked.connect(self._show_logs)
+        header_row.addWidget(self._logs_btn)
         self._copy_all_btn = QPushButton("Copy all")
-        self._copy_all_btn.clicked.connect(self._on_copy_all)
+        self._copy_all_btn.clicked.connect(lambda: self._copy_all_from(self._live_list))
         header_row.addWidget(self._copy_all_btn)
         self._clear_btn = QPushButton("Clear history")
         self._clear_btn.setObjectName("destructive")
@@ -110,35 +153,14 @@ class HistoryTab(QWidget):
 
         layout.addWidget(
             subheading(
-                "The last 30 transcripts Slumbr has produced — older ones clear "
-                "automatically. Local only, never sent anywhere. "
-                "Double-click, right-click, or select + Ctrl+C to copy a line."
+                "Your live transcripts this session. At 30 the batch rolls into "
+                "Session logs and the list starts fresh. Local only, never sent "
+                "anywhere. Double-click, right-click, or select + Ctrl+C to copy."
             )
         )
 
-        self._list = QListWidget()
-        self._list.setItemDelegate(_HistoryDelegate())
-        self._list.setMouseTracking(True)  # so rows highlight on hover
-        # Copy a transcript out: double-click, right-click, or select + Ctrl+C.
-        # (A dictation that got "sent" with no field focused still lands here,
-        # so it needs to be recoverable without digging through the log file.)
-        self._list.itemDoubleClicked.connect(self._copy_item)
-        self._list.setContextMenuPolicy(Qt.CustomContextMenu)
-        self._list.customContextMenuRequested.connect(self._show_context_menu)
-        _copy_sc = QShortcut(QKeySequence.StandardKey.Copy, self._list)
-        _copy_sc.activated.connect(self._copy_selected)
-        self._list.setStyleSheet(
-            f"""
-            QListWidget {{
-                background: {BG_PANEL};
-                border: 1px solid {BORDER};
-                border-radius: 12px;
-                padding: 8px;
-                outline: 0;
-            }}
-            """
-        )
-        layout.addWidget(self._list, stretch=1)
+        self._live_list = self._make_transcript_list()
+        layout.addWidget(self._live_list, stretch=1)
 
         self._empty_label = QLabel(
             "No dictations yet.\n\nTap your hotkey to start dictating — your "
@@ -152,31 +174,141 @@ class HistoryTab(QWidget):
         self._empty_label.setWordWrap(True)
         layout.addWidget(self._empty_label)
 
-        self.refresh()
+        return page
 
-        outer = QVBoxLayout(self)
-        outer.setContentsMargins(0, 0, 0, 0)
-        outer.addWidget(scrollable(body))
+    def _build_logs_page(self) -> QWidget:
+        page, layout = self._page()
 
-    def refresh(self) -> None:
-        """Re-read from disk. Called when the dialog opens + after clear."""
-        entries = history.load_all()
-        self._list.clear()
+        header_row = QHBoxLayout()
+        header_row.setSpacing(12)
+        back = QPushButton("‹  History")
+        back.clicked.connect(lambda: self._stack.setCurrentIndex(0))
+        header_row.addWidget(back)
+        header_row.addWidget(heading("Session logs", size=28))
+        header_row.addStretch(1)
+        self._logs_count_tag = tag("0")
+        header_row.addWidget(self._logs_count_tag)
+        layout.addLayout(header_row)
+
+        layout.addWidget(
+            subheading(
+                "Batches that rolled off your live History this session — your "
+                "fallback if the list auto-cleared and you needed one back. "
+                "Temporary: these are deleted when you close Slumbr. "
+                "Click a log to view its transcripts."
+            )
+        )
+
+        self._logs_list = QListWidget()
+        self._logs_list.setStyleSheet(_LIST_QSS)
+        self._logs_list.setMouseTracking(True)
+        self._logs_list.itemActivated.connect(self._open_batch_item)
+        self._logs_list.itemClicked.connect(self._open_batch_item)
+        layout.addWidget(self._logs_list, stretch=1)
+
+        return page
+
+    def _build_detail_page(self) -> QWidget:
+        page, layout = self._page()
+
+        header_row = QHBoxLayout()
+        header_row.setSpacing(12)
+        back = QPushButton("‹  Session logs")
+        back.clicked.connect(self._show_logs)
+        header_row.addWidget(back)
+        self._detail_title = heading("Log", size=28)
+        header_row.addWidget(self._detail_title)
+        header_row.addStretch(1)
+        self._detail_count_tag = tag("0")
+        header_row.addWidget(self._detail_count_tag)
+        detail_copy = QPushButton("Copy all")
+        detail_copy.clicked.connect(lambda: self._copy_all_from(self._detail_list))
+        header_row.addWidget(detail_copy)
+        layout.addLayout(header_row)
+
+        self._detail_list = self._make_transcript_list()
+        layout.addWidget(self._detail_list, stretch=1)
+
+        return page
+
+    # ----------------------------------------------------------- list helpers
+
+    def _make_transcript_list(self) -> QListWidget:
+        lw = QListWidget()
+        lw.setItemDelegate(_HistoryDelegate())
+        lw.setMouseTracking(True)  # rows highlight on hover
+        lw.setStyleSheet(_LIST_QSS)
+        # Copy a transcript out: double-click, right-click, or select + Ctrl+C.
+        lw.itemDoubleClicked.connect(self._copy_item)
+        lw.setContextMenuPolicy(Qt.CustomContextMenu)
+        lw.customContextMenuRequested.connect(
+            lambda pos, _l=lw: self._show_context_menu(_l, pos)
+        )
+        sc = QShortcut(QKeySequence.StandardKey.Copy, lw)
+        sc.activated.connect(lambda _l=lw: self._copy_item(_l.currentItem()))
+        return lw
+
+    def _populate(self, lw: QListWidget, entries: list) -> None:
+        lw.clear()
         for entry in reversed(entries):  # newest first
             item = QListWidgetItem()
             item.setData(_TS_ROLE, _format_ts(entry.ts))
             item.setData(_TEXT_ROLE, entry.text)
             item.setToolTip(entry.text)
-            self._list.addItem(item)
+            lw.addItem(item)
+
+    # ----------------------------------------------------------- refresh / nav
+
+    def refresh(self) -> None:
+        """Re-read the live batch from disk + update the Session-logs button.
+        Called when the dialog opens this tab + after a clear."""
+        entries = history.load_all()
+        self._populate(self._live_list, entries)
         cap = getattr(history, "MAX_ENTRIES", 30)
         self._count_tag.setText(f"{len(entries)} / {cap}")
         self._count_tag.setVisible(bool(entries))
-        # Nothing to copy/clear on an empty list — disabled (exercises the
-        # dialog's :disabled styling, and reads correctly).
         self._copy_all_btn.setEnabled(bool(entries))
         self._clear_btn.setEnabled(bool(entries))
         self._empty_label.setVisible(not entries)
-        self._list.setVisible(bool(entries))
+        self._live_list.setVisible(bool(entries))
+
+        n_batches = len(session_logs.list_batches())
+        self._logs_btn.setText(f"Session logs ({n_batches})")
+        self._logs_btn.setVisible(n_batches > 0)
+
+        # If a batch was cleared out from under us, don't strand the user deep
+        # in the browser.
+        if n_batches == 0 and self._stack.currentIndex() != 0:
+            self._stack.setCurrentIndex(0)
+
+    def _show_logs(self) -> None:
+        batches = session_logs.list_batches()
+        self._logs_list.clear()
+        for meta in reversed(batches):  # newest log first
+            item = QListWidgetItem(
+                f"Log {meta.index}    ·    {meta.count} transcripts    ·    "
+                f"{_format_clock(meta.first_ts)}–{_format_clock(meta.last_ts)}"
+            )
+            f = QFont()
+            f.setPointSize(11)
+            item.setFont(f)
+            item.setSizeHint(QSize(0, 46))
+            item.setData(_INDEX_ROLE, meta.index)
+            self._logs_list.addItem(item)
+        self._logs_count_tag.setText(str(len(batches)))
+        self._stack.setCurrentIndex(1)
+
+    def _open_batch_item(self, item: QListWidgetItem | None) -> None:
+        if item is None:
+            return
+        idx = item.data(_INDEX_ROLE)
+        if idx is None:
+            return
+        entries = session_logs.load_batch(int(idx))
+        self._populate(self._detail_list, entries)
+        self._detail_title.setText(f"Log {idx}")
+        self._detail_count_tag.setText(str(len(entries)))
+        self._stack.setCurrentIndex(2)
 
     def _on_clear_clicked(self) -> None:
         history.clear()
@@ -189,32 +321,31 @@ class HistoryTab(QWidget):
         if not text:
             return
         QApplication.clipboard().setText(text)
-        QToolTip.showText(QCursor.pos(), "Copied ✓", self._list)
+        QToolTip.showText(QCursor.pos(), "Copied ✓", self)
 
     def _copy_item(self, item: QListWidgetItem | None) -> None:
         if item is not None:
             self._copy_text(item.data(_TEXT_ROLE))
 
-    def _copy_selected(self) -> None:
-        self._copy_item(self._list.currentItem())
-
-    def _on_copy_all(self) -> None:
-        entries = history.load_all()  # oldest-first — reads as a chronological log
-        if not entries:
+    def _copy_all_from(self, lw: QListWidget) -> None:
+        rows = [lw.item(i) for i in range(lw.count())]
+        if not rows:
             return
-        blob = "\n".join(f"[{_format_ts(e.ts)}] {e.text}" for e in entries)
-        QApplication.clipboard().setText(blob)
-        QToolTip.showText(
-            QCursor.pos(), f"Copied {len(entries)} transcripts ✓", self._copy_all_btn
+        # rows are newest-first in the view; copy oldest-first so it reads as a
+        # chronological log.
+        blob = "\n".join(
+            f"[{it.data(_TS_ROLE)}] {it.data(_TEXT_ROLE)}" for it in reversed(rows)
         )
+        QApplication.clipboard().setText(blob)
+        QToolTip.showText(QCursor.pos(), f"Copied {len(rows)} transcripts ✓", self)
 
-    def _show_context_menu(self, pos) -> None:
-        menu = QMenu(self._list)
-        item = self._list.itemAt(pos)
+    def _show_context_menu(self, lw: QListWidget, pos) -> None:
+        menu = QMenu(lw)
+        item = lw.itemAt(pos)
         if item is not None:
             menu.addAction("Copy", lambda: self._copy_item(item))
-        menu.addAction("Copy all", self._on_copy_all)
-        menu.exec(self._list.mapToGlobal(pos))
+        menu.addAction("Copy all", lambda: self._copy_all_from(lw))
+        menu.exec(lw.mapToGlobal(pos))
 
 
 def _format_ts(ts: float) -> str:
@@ -230,3 +361,7 @@ def _format_ts(ts: float) -> str:
     if when.date() == today:
         return when.strftime("%H:%M")
     return when.strftime("%b %d %H:%M")
+
+
+def _format_clock(ts: float) -> str:
+    return datetime.fromtimestamp(ts).strftime("%H:%M")

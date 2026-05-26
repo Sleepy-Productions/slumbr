@@ -41,7 +41,7 @@ from PySide6.QtCore import QObject, Qt, QTimer, Signal
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication, QDialog
 
-from . import history
+from . import history, session_logs
 from .audio.capture import SAMPLE_RATE, AudioRecorder
 from .audio.mirror import MicMirror
 from .bootstrap.install import relaunch_slumbr
@@ -103,13 +103,42 @@ class SlumbrApp:
         from .theme import apply_dark_palette
         apply_dark_palette(self.qapp)
 
-        # ----- Config (with legacy → BackendConfig migration). Loaded before
-        # the window icon so the icon can be tinted to the user's accent.
+        # ----- Config (with legacy → BackendConfig migration).
         self.config = SlumbrConfig.load()
 
-        # ----- Taskbar / window icon = the moon-v2 brand mark tinted to the
-        # user's accent, so the symbol matches the rest of the app. Falls back
-        # to the static brand .ico if the tint fails.
+        # ----- Session-log lifecycle. If the previous session left its running
+        # marker behind, it crashed — gather everything it produced (rolled
+        # batches + the live partial, chronological), dump a durable crash log,
+        # and flag a recovery prompt for once the UI is up. Otherwise it shut
+        # down cleanly → start fresh (History is session-scoped). ``begin()``
+        # (drops this session's marker) is called after the wizard, so a
+        # cancelled first-run doesn't masquerade as a crash next time.
+        self._pending_recovery = 0
+        self._restarting = False
+        if session_logs.previous_session_crashed():
+            recovered = []
+            for meta in session_logs.list_batches():
+                recovered.extend(session_logs.load_batch(meta.index))
+            recovered.extend(history.load_all())
+            if recovered:
+                session_logs.write_crash_log(recovered)
+                self._pending_recovery = len(recovered)
+                log.info(
+                    "previous session crashed — %d transcripts recoverable",
+                    len(recovered),
+                )
+            else:
+                session_logs.reset()
+        else:
+            history.clear()
+            session_logs.reset()
+
+        # ----- Taskbar / window icon = the moon-v2 brand mark in the FIXED
+        # monochrome brand color (branding.LOGO_COLOR = white). It does NOT
+        # follow the user's accent — the logo is the brand mark, the accent is
+        # "your color" for the chrome (tray dot, visualizer). Keep it that way:
+        # a pink/tinted icon is a bug, not a feature. Falls back to the static
+        # brand .ico if the render fails.
         self._app_icon: QIcon | None = self._build_app_icon()
         if self._app_icon is not None:
             self.qapp.setWindowIcon(self._app_icon)
@@ -132,6 +161,10 @@ class SlumbrApp:
             self.config.backend.name,
             self.config.backend.model,
         )
+
+        # Drop this session's running marker now that we're committed to
+        # running (past the wizard) — its absence next launch == clean exit.
+        session_logs.begin()
 
         # ----- Transcriber (primary STT) + streaming engine (live popup
         # partials, always Moonshine on CPU). Built on a worker thread
@@ -462,11 +495,20 @@ class SlumbrApp:
         dlg.raise_()
         dlg.activateWindow()
 
-    def _open_settings_maximized(self) -> None:
-        """Open Settings maximized — used on launch so the window is front and
-        center, instead of Slumbr starting silently into just a tray icon."""
+    def _open_settings_on_launch(self) -> None:
+        """Open Settings on launch so Slumbr shows a window (not just a tray
+        icon) — centered at its comfortable default size. NOT maximized: the
+        layout is sidebar-left / content-left, so maximizing on a wide monitor
+        leaves a large dead strip on the right. Centered reads cleaner."""
+        from PySide6.QtGui import QGuiApplication
+
         dlg = self._ensure_settings_dialog()
-        dlg.showMaximized()
+        dlg.showNormal()
+        screen = QGuiApplication.primaryScreen()
+        if screen is not None:
+            frame = dlg.frameGeometry()
+            frame.moveCenter(screen.availableGeometry().center())
+            dlg.move(frame.topLeft())
         dlg.raise_()
         dlg.activateWindow()
 
@@ -679,6 +721,13 @@ class SlumbrApp:
         that aren't hot-applied — switching backend, etc.).
         """
         log.info("restart requested")
+        # Clean session boundary: wipe the session now so the relaunched
+        # instance starts fresh and doesn't read this exit as a crash. The
+        # flag makes _on_quit skip its own session cleanup (the new instance
+        # owns the session from here).
+        session_logs.end()
+        history.clear()
+        self._restarting = True
         relaunch_slumbr()
         self._on_quit()
 
@@ -713,11 +762,37 @@ class SlumbrApp:
             self.transcriber.close()
         except Exception:  # noqa: BLE001
             pass
+        # Session-scoped cleanup: a clean exit wipes the temporary session logs
+        # and the live history (reset every launch). Skipped on restart — the
+        # handoff in _on_restart already did it and owns the next session.
+        if not getattr(self, "_restarting", False):
+            session_logs.end()
+            history.clear()
         self.tray.stop()
         self.qapp.quit()
 
+    def _show_recovery(self) -> None:
+        """Offer to restore a crashed session's transcripts. Recover leaves the
+        rolled batches + live partial in place (they reappear under History +
+        Session logs); Discard wipes them. The crash-log file written at startup
+        stays either way, so nothing is ever truly lost without consent."""
+        n = getattr(self, "_pending_recovery", 0)
+        if not n:
+            return
+        from .ui.recovery_dialog import RecoveryDialog
+
+        dlg = RecoveryDialog(n, self.config.accent_color, self._app_icon)
+        if dlg.exec() != QDialog.Accepted:  # Discard
+            session_logs.reset()
+            history.clear()
+        self._pending_recovery = 0
+
     def run(self) -> int:
-        # Surface Settings (maximized) shortly after boot so launching Slumbr
+        # If the previous session crashed, offer recovery first (modal), then
+        # surface Settings.
+        if getattr(self, "_pending_recovery", 0):
+            QTimer.singleShot(600, self._show_recovery)
+        # Surface Settings (centered) shortly after boot so launching Slumbr
         # always shows a window, not just a tray icon. 800 ms lets boot settle.
-        QTimer.singleShot(800, self._open_settings_maximized)
+        QTimer.singleShot(800, self._open_settings_on_launch)
         return self.qapp.exec()
