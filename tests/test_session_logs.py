@@ -6,6 +6,8 @@ All paths are redirected under a tmp APPDATA so tests never touch the real
 
 from __future__ import annotations
 
+import json
+import os
 import time
 
 import pytest
@@ -78,14 +80,39 @@ def test_history_rolls_and_resets_on_overflow(appdata):
 # ---------------------------------------------------------- lifecycle
 
 
-def test_lock_lifecycle(appdata):
+def _write_lock(appdata, pid: int) -> None:
+    sdir = appdata / "Slumbr" / "session"
+    sdir.mkdir(parents=True, exist_ok=True)
+    (sdir / "lock.json").write_text(json.dumps({"pid": pid, "started_at": 0.0}), encoding="utf-8")
+
+
+def test_no_lock_is_clean(appdata):
     assert session_logs.previous_session_crashed() is False
+    assert session_logs.another_instance_running() is False
+
+
+def test_own_live_lock_is_not_a_crash(appdata):
+    # begin() writes a lock owned by THIS (alive) process — not a crash, and not
+    # "another" instance (it's us). end() removes it.
     session_logs.begin()
-    assert session_logs.previous_session_crashed() is True
-    session_logs.roll_batch([_e("a")])
+    assert session_logs.previous_session_crashed() is False
+    assert session_logs.another_instance_running() is False
     session_logs.end()
     assert session_logs.previous_session_crashed() is False
-    assert session_logs.list_batches() == []
+
+
+def test_orphaned_lock_is_a_crash(appdata):
+    # A lock owned by a dead PID = a genuine unclean exit.
+    _write_lock(appdata, 0x7FFFFFFE)  # a PID that is not running
+    assert session_logs.previous_session_crashed() is True
+    assert session_logs.another_instance_running() is False
+
+
+def test_live_other_instance_is_not_a_crash(appdata):
+    # A lock owned by another ALIVE process (the parent) = concurrent launch.
+    _write_lock(appdata, os.getppid())
+    assert session_logs.another_instance_running() is True
+    assert session_logs.previous_session_crashed() is False
 
 
 # ---------------------------------------------------------- crash log

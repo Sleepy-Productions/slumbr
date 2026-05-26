@@ -28,6 +28,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -158,10 +159,72 @@ def load_batch(index: int) -> list:
 # ---------------------------------------------------------- lifecycle
 
 
+def _pid_alive(pid: int) -> bool:
+    """Is a process with this PID currently running? (Windows; best-effort.)"""
+    if sys.platform != "win32":
+        return False
+    try:
+        import ctypes
+
+        PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+        h = ctypes.windll.kernel32.OpenProcess(
+            PROCESS_QUERY_LIMITED_INFORMATION, False, int(pid)
+        )
+        if h:
+            ctypes.windll.kernel32.CloseHandle(h)
+            return True
+    except Exception:  # noqa: BLE001
+        pass
+    return False
+
+
+def _lock_owner_pid() -> int | None:
+    try:
+        data = json.loads(_lock_path().read_text(encoding="utf-8"))
+        return int(data["pid"])
+    except (OSError, KeyError, ValueError, TypeError, json.JSONDecodeError):
+        return None
+
+
+def another_instance_running() -> bool:
+    """True if the session lock is held by a DIFFERENT process that is still
+    alive — i.e. another Slumbr is already running. Distinct from a crash (where
+    the lock's owner is gone). Used for the single-instance guard."""
+    if not _lock_path().is_file():
+        return False
+    pid = _lock_owner_pid()
+    return pid is not None and pid != os.getpid() and _pid_alive(pid)
+
+
+def focus_existing() -> None:
+    """Best-effort: surface a running Slumbr's Settings window, so a second
+    launch brings the app forward instead of silently doing nothing."""
+    if sys.platform != "win32":
+        return
+    try:
+        import win32con
+        import win32gui
+
+        def _cb(hwnd, _):
+            t = win32gui.GetWindowText(hwnd)
+            if win32gui.IsWindowVisible(hwnd) and "Slumbr" in t and "Settings" in t:
+                win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
+                win32gui.SetForegroundWindow(hwnd)
+
+        win32gui.EnumWindows(_cb, None)
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def previous_session_crashed() -> bool:
-    """True if a running-marker from a prior launch is still present — i.e. the
-    last session didn't shut down cleanly."""
-    return _lock_path().is_file()
+    """True only if a session lock was left by a process that is NO LONGER
+    running — a genuine unclean exit. A lock held by a live instance is a
+    concurrent launch (handled by the single-instance guard), NOT a crash, so
+    it must not trigger the recovery prompt."""
+    if not _lock_path().is_file():
+        return False
+    pid = _lock_owner_pid()
+    return pid is None or not _pid_alive(pid)
 
 
 def begin() -> None:
