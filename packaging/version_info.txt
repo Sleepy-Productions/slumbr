@@ -1,0 +1,33 @@
+# PyInstaller version resource for Slumbr.exe — embedded at BUILD time (via the
+# spec's EXE(version=...)) so the frozen exe ships with FileDescription="Slumbr"
+# and the taskbar/pin read "Slumbr", never "Python". Embedding at build (vs
+# post-editing the exe) keeps the binary unmodified, so Windows Defender doesn't
+# re-scan it on every launch (a post-edit changed the hash → multi-second hang).
+# Keep the versions in sync with pyproject / __init__ on a release bump.
+VSVersionInfo(
+  ffi=FixedFileInfo(
+    filevers=(1, 0, 0, 0),
+    prodvers=(1, 0, 0, 0),
+    mask=0x3f,
+    flags=0x0,
+    OS=0x40004,
+    fileType=0x1,
+    subtype=0x0,
+    date=(0, 0),
+  ),
+  kids=[
+    StringFileInfo([
+      StringTable('040904B0', [
+        StringStruct('CompanyName', 'Sleepy Productions'),
+        StringStruct('FileDescription', 'Slumbr'),
+        StringStruct('FileVersion', '1.0.0'),
+        StringStruct('InternalName', 'Slumbr'),
+        StringStruct('OriginalFilename', 'Slumbr.exe'),
+        StringStruct('ProductName', 'Slumbr'),
+        StringStruct('ProductVersion', '1.0.0'),
+        StringStruct('LegalCopyright', 'Sleepy Productions'),
+      ]),
+    ]),
+    VarFileInfo([VarStruct('Translation', [1033, 1200])]),
+  ],
+)
