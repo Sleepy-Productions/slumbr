@@ -21,10 +21,10 @@ VIOLET_DEEP = "#7B4FC0"  # TRANSCRIBING dot, borders
 # Dark surfaces — near-black, neutral (no blue tint), matching the SleepyDev
 # black+white house brand. Small steps between layers keep cards/borders
 # legible without the surfaces reading as "gray".
-BG_DARK = "#08080A"  # window backgrounds (near-black)
-BG_PANEL = "#101013"  # elevated panels (popup pill)
-BG_PANEL_HI = "#18181C"  # cards / button rest
-BORDER = "#2C2C32"  # 1px dividers
+BG_DARK = "#000000"  # window backgrounds (pure black)
+BG_PANEL = "#08080A"  # elevated panels (popup pill)
+BG_PANEL_HI = "#0D0D11"  # cards / button rest (outline-on-black look)
+BORDER = "#2A2A30"  # 1px dividers — define cards on the black surface
 TEXT_PRIMARY = "#F3EDFF"  # white-ish for body
 TEXT_SECONDARY = "#A09EB0"  # muted
 
