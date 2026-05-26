@@ -1,0 +1,16 @@
+# Benchmark prompts — read each aloud the way you'd dictate.
+# Lines starting with # are ignored. Mix of phonetically-balanced
+# Harvard sentences and dictation-style lines with real jargon, so WER
+# reflects both clean speech and the terms you actually use.
+The birch canoe slid on the smooth planks.
+Glue the sheet to the dark blue background.
+It's easy to tell the depth of a well.
+These days a chicken leg is a rare dish.
+The juice of lemons makes fine punch.
+Four hours of steady work faced us.
+A large size in stockings is hard to sell.
+Let's push the Slumbr commit to the private repo and then build the benchmark harness.
+The recording popup should open downward like a dropdown instead of climbing up.
+Switch the engine to large v3 turbo and run it on the GPU with int8 float16.
+On a CPU only machine we fall back to Moonshine or faster whisper for accuracy.
+Set my keybind to control shift J and make sure control C still works everywhere.

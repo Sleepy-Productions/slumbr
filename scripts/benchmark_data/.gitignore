@@ -1,0 +1,4 @@
+# Local benchmark scratch — recorded voice clips, references, and results
+# stay on this machine; never commit them.
+*
+!.gitignore
