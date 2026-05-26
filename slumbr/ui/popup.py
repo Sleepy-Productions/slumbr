@@ -47,6 +47,7 @@ from ..theme import (
     COLOR_ERROR,
     COLOR_IDLE,
     COLOR_TRANSCRIBING,
+    RADIUS_CARD,
     TEXT_SECONDARY,
     VIOLET_PRIMARY,
 )
@@ -610,7 +611,7 @@ class RecordingPopup(QWidget):
         width = 2 if self._flash_color is not None else 1
         p.setPen(QPen(QColor(border_color), width))
         p.setBrush(QBrush(QColor(BG_PANEL)))
-        p.drawRoundedRect(self.rect().adjusted(0, 0, -1, -1), 12, 12)
+        p.drawRoundedRect(self.rect().adjusted(0, 0, -1, -1), RADIUS_CARD, RADIUS_CARD)
 
     # ------------------------------------------------------------- placement
     def _reposition(self) -> None:

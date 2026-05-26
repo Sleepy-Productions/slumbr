@@ -38,7 +38,7 @@ from ...hardware.recommend import (
     model_options,
     thread_budget,
 )
-from ...theme import BG_PANEL_HI, BORDER, TEXT_PRIMARY, TEXT_SECONDARY, VIOLET_PRIMARY
+from ...theme import BG_PANEL_HI, BORDER, RADIUS_MD, TEXT_PRIMARY, TEXT_SECONDARY, VIOLET_PRIMARY
 from ._widgets import field_label, heading, scrollable, subheading
 
 log = logging.getLogger(__name__)
@@ -123,7 +123,7 @@ class _OptionCard(QFrame):
         width = 2 if self._active else 1
         self.setStyleSheet(
             f"QFrame#optCard {{ background: {BG_PANEL_HI}; border: {width}px solid {border}; "
-            f"border-radius: 10px; }}"
+            f"border-radius: {RADIUS_MD}px; }}"
         )
         self._check.setText("✓" if self._active else "")
 
@@ -248,7 +248,7 @@ class EngineTab(QWidget):
         row.setObjectName("hwRow")
         row.setStyleSheet(
             f"QFrame#hwRow {{ background: {BG_PANEL_HI}; border: 1px solid {BORDER}; "
-            f"border-radius: 10px; }}"
+            f"border-radius: {RADIUS_MD}px; }}"
         )
         lay = QHBoxLayout(row)
         lay.setContentsMargins(14, 9, 14, 9)

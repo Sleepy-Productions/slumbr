@@ -37,6 +37,7 @@ from ...input.keymap import vk_label
 from ...theme import (
     BG_PANEL,
     BORDER,
+    RADIUS_MD,
     TEXT_PRIMARY,
     TEXT_SECONDARY,
 )
@@ -357,7 +358,7 @@ class _VBCableInstallDialog(QDialog):
         self._log.setReadOnly(True)
         self._log.setStyleSheet(
             f"QPlainTextEdit {{ background: {BG_PANEL}; border: 1px solid {BORDER}; "
-            f"border-radius: 10px; padding: 10px; color: {TEXT_PRIMARY}; "
+            f"border-radius: {RADIUS_MD}px; padding: 10px; color: {TEXT_PRIMARY}; "
             "font-family: Consolas; font-size: 9pt; }}"
         )
         outer.addWidget(self._log, stretch=1)
