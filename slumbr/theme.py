@@ -39,6 +39,53 @@ COLOR_PASTING = VIOLET_DEEP          # gray
 COLOR_SENT = "#5FB87A"  # green — brief "✓ Sent" flash (functional success signal)
 COLOR_ERROR = "#E0685F"  # red — brief "✗ Failed" flash (functional error signal)
 
+TEXT_DISABLED = "#5A5A5A"  # greyed-out controls (distinct from secondary text)
+
+
+# ---- typography + scale tokens --------------------------------------------
+# House fonts (bundled in assets/fonts/, registered at startup by
+# load_app_fonts). Sora = display/headings, Inter = body/UI; Consolas stays the
+# mono face (timestamps, keycaps). QSS family strings list a system fallback so
+# the UI still renders if registration ever fails.
+FONT_DISPLAY = "Sora"
+FONT_BODY = "Inter"
+FONT_MONO = "Consolas"
+
+# Spacing: 8pt grid (4pt sub-steps). Reference these instead of ad-hoc px.
+SPACE_XS, SPACE_SM, SPACE_MD, SPACE_LG, SPACE_XL = 4, 8, 12, 16, 24
+
+# Radius scale — one default, collapsing the old 5/6/10/11/12 sprawl.
+RADIUS_XS = 6     # small chips, checkbox indicator
+RADIUS_MD = 8     # default: buttons, combos
+RADIUS_CARD = 12  # cards, text areas, lists
+RADIUS_PILL = 999
+
+_FONTS_LOADED = False
+
+
+def load_app_fonts(app) -> None:
+    """Register the bundled house fonts and make Inter the application default
+    family (size unchanged). Call once, right after QApplication is created.
+    Idempotent and defensive: on any failure the UI keeps the system font."""
+    global _FONTS_LOADED
+    if _FONTS_LOADED:
+        return
+    try:
+        from pathlib import Path
+
+        from PySide6.QtGui import QFontDatabase
+
+        fonts_dir = Path(__file__).parent / "assets" / "fonts"
+        for ttf in ("Inter-Regular.ttf", "Inter-SemiBold.ttf", "Sora.ttf"):
+            QFontDatabase.addApplicationFont(str(fonts_dir / ttf))
+        f = app.font()
+        f.setFamily(FONT_BODY)  # family only — preserve Qt's default point size
+        app.setFont(f)
+        _FONTS_LOADED = True
+    except Exception:
+        # Never let a font hiccup block startup — Segoe UI remains the fallback.
+        pass
+
 
 # ---- accent derivation ----------------------------------------------------
 # The user-chosen accent (config.accent_color, default = VIOLET_PRIMARY)
@@ -54,6 +101,30 @@ def _hex_to_rgb(h: str) -> tuple[int, int, int]:
 def _mix(rgb: tuple[float, float, float], target: tuple[int, int, int], t: float) -> str:
     r, g, b = (c + (tc - c) * t for c, tc in zip(rgb, target, strict=False))
     return f"#{int(round(r)):02X}{int(round(g)):02X}{int(round(b)):02X}"
+
+
+def apply_dark_palette(app) -> None:
+    """Set a black QPalette on the QApplication. Qt-Style-Sheets only color the
+    widgets they explicitly target; everything else (scroll-area viewports,
+    item-view gaps, tooltips, default widget backgrounds) falls back to the
+    PALETTE, which is OS-default GREY on Windows. Without this, those surfaces
+    render grey behind the black-styled cards. Call once, right after creating
+    the QApplication (in the real app AND any screenshot harness, so captures
+    match)."""
+    from PySide6.QtGui import QColor, QPalette
+
+    p = app.palette()
+    p.setColor(QPalette.Window, QColor(BG_DARK))
+    p.setColor(QPalette.Base, QColor(BG_DARK))
+    p.setColor(QPalette.AlternateBase, QColor(BG_PANEL))
+    p.setColor(QPalette.Button, QColor(BG_PANEL_HI))
+    p.setColor(QPalette.WindowText, QColor(TEXT_PRIMARY))
+    p.setColor(QPalette.Text, QColor(TEXT_PRIMARY))
+    p.setColor(QPalette.ButtonText, QColor(TEXT_PRIMARY))
+    p.setColor(QPalette.ToolTipBase, QColor(BG_PANEL))
+    p.setColor(QPalette.ToolTipText, QColor(TEXT_PRIMARY))
+    p.setColor(QPalette.PlaceholderText, QColor(TEXT_SECONDARY))
+    app.setPalette(p)
 
 
 def text_on(bg_hex: str) -> str:
