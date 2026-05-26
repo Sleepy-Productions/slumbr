@@ -1,20 +1,13 @@
 """Advanced tab — power-user knobs, tucked out of the way.
 
-Slumbr works out of the box, so the fiddly bits live here: the reverse-PTT
-keybind, the virtual-cable device + installer, paste extras (auto-send /
-clipboard restore), and the text-cleanup knobs (vocabulary hint,
-auto-corrections, trailing-filler strip).
-
-The simple *toggles* (enable reverse PTT / enable mic routing) stay on the
-Behavior tab; this tab owns only their details. Both sides just read/write
-the same ``SlumbrConfig`` fields, so they stay in sync across tabs without
-any direct coupling.
+Slumbr works out of the box, so the fiddly bits live here: the virtual-cable
+device + installer, paste extras (auto-send, keep-on-clipboard), and the
+vocabulary hint. Most users never need to open this tab.
 """
 
 from __future__ import annotations
 
-from PySide6.QtCore import QEvent, Qt, QThread, Signal
-from PySide6.QtGui import QKeyEvent
+from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
     QDialog,
@@ -29,7 +22,6 @@ from PySide6.QtWidgets import (
 from ...audio.mirror import find_virtual_cables
 from ...bootstrap.vbcable import VBCableInstallWorker
 from ...config import SlumbrConfig
-from ...input.keymap import vk_label
 from ...theme import (
     BG_PANEL,
     BORDER,
@@ -47,30 +39,6 @@ from ._widgets import (
     section_card,
     subheading,
 )
-
-
-def _format_replacements(d: dict[str, str]) -> str:
-    """Render the {heard: corrected} map as editable 'heard => corrected' lines."""
-    return "\n".join(f"{k} => {v}" for k, v in d.items())
-
-
-def _parse_replacements(text: str) -> dict[str, str]:
-    """Parse 'heard => corrected' (or '->') lines back into a map. Malformed
-    lines are skipped silently so a half-typed entry never breaks the rest.
-    """
-    out: dict[str, str] = {}
-    for line in text.splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        for sep in ("=>", "->"):
-            if sep in line:
-                left, right = line.split(sep, 1)
-                left, right = left.strip(), right.strip()
-                if left and right:
-                    out[left] = right
-                break
-    return out
 
 
 class AdvancedTab(QWidget):
@@ -94,26 +62,6 @@ class AdvancedTab(QWidget):
             )
         )
 
-        # ===== Reverse-PTT key =====
-        _card, sl = section_card("Reverse-PTT key")
-        sl.addWidget(
-            field_hint(
-                "The key Slumbr holds during dictation so another app's "
-                "push-to-mute (e.g. Discord) silences your mic. Turn reverse PTT "
-                "on in the Behavior tab; set its key here."
-            )
-        )
-        row = QHBoxLayout()
-        row.setSpacing(10)
-        row.setContentsMargins(0, 4, 0, 0)
-        row.addWidget(field_label("Key to send:"))
-        self._mute_key_btn = _CaptureKeyButton(config.reverse_ptt_vk)
-        self._mute_key_btn.key_captured.connect(self._on_mute_key_captured)
-        row.addWidget(self._mute_key_btn)
-        row.addStretch(1)
-        sl.addLayout(row)
-        layout.addWidget(_card)
-
         # ===== Virtual cable =====
         _card, sl = section_card("Virtual mic cable")
         self._cables = find_virtual_cables()
@@ -126,7 +74,7 @@ class AdvancedTab(QWidget):
             status_text = QLabel(
                 f"Detected {len(self._cables)} usable virtual cable"
                 + ("s" if len(self._cables) > 1 else "")
-                + ". Set your call app's mic to \"CABLE Output\"."
+                + '. Set your call app\'s mic to "CABLE Output".'
             )
         else:
             status_dot.setStyleSheet(f"color: {TEXT_SECONDARY}; font-size: 14px;")
@@ -174,26 +122,31 @@ class AdvancedTab(QWidget):
         # ===== Pasting extras =====
         _card, sl = section_card("Pasting")
         self._auto_send_cb = QCheckBox(
-            "Press Enter after pasting (auto-send for chat apps)"
+            "Auto-send — press Enter right after your second hotkey tap"
         )
         self._auto_send_cb.setChecked(config.auto_send)
         self._auto_send_cb.toggled.connect(self._on_changed)
         sl.addWidget(self._auto_send_cb)
-        self._preserve_cb = QCheckBox(
-            "Restore previous clipboard contents after pasting"
+        sl.addWidget(
+            field_hint(
+                "Tip: click into the box you want before your second tap, so it "
+                "pastes (and sends) in the right place."
+            )
         )
-        self._preserve_cb.setChecked(config.preserve_clipboard)
-        self._preserve_cb.toggled.connect(self._on_changed)
-        sl.addWidget(self._preserve_cb)
+        self._keep_clip_cb = QCheckBox(
+            "Keep the transcript on your clipboard (paste it again anywhere)"
+        )
+        self._keep_clip_cb.setChecked(config.keep_transcript_on_clipboard)
+        self._keep_clip_cb.toggled.connect(self._on_changed)
+        sl.addWidget(self._keep_clip_cb)
         layout.addWidget(_card)
 
-        # ===== Vocabulary & corrections =====
-        _card, sl = section_card("Vocabulary & corrections")
-        sl.addWidget(field_label("Vocabulary hint"))
+        # ===== Vocabulary =====
+        _card, sl = section_card("Vocabulary")
         sl.addWidget(
             field_hint(
                 "List proper nouns, technical terms, slang — anything Slumbr "
-                "mishears. Up to ~200 tokens. Used as Whisper's initial_prompt "
+                "mishears. Up to ~200 tokens. Biases the Whisper backends "
                 "(Moonshine ignores this)."
             )
         )
@@ -205,28 +158,6 @@ class AdvancedTab(QWidget):
         self._prompt_edit.setFixedHeight(110)
         self._prompt_edit.textChanged.connect(self._on_changed)
         sl.addWidget(self._prompt_edit)
-
-        sl.addWidget(field_label("Auto-corrections"))
-        sl.addWidget(
-            field_hint(
-                "Fix mishears Slumbr makes the same way every time. One per line, "
-                "format: heard => corrected (e.g. keybinde => keybinds). Whole-word, "
-                "case-insensitive, applied to every backend before paste."
-            )
-        )
-        self._repl_edit = QPlainTextEdit()
-        self._repl_edit.setPlainText(_format_replacements(config.word_replacements))
-        self._repl_edit.setPlaceholderText("keybinde => keybinds\nslumber => Slumbr")
-        self._repl_edit.setFixedHeight(90)
-        self._repl_edit.textChanged.connect(self._on_changed)
-        sl.addWidget(self._repl_edit)
-
-        self._strip_filler = QCheckBox(
-            "Remove trailing “thank you” / “thanks for watching” hallucinations"
-        )
-        self._strip_filler.setChecked(config.strip_trailing_filler)
-        self._strip_filler.stateChanged.connect(self._on_changed)
-        sl.addWidget(self._strip_filler)
         layout.addWidget(_card)
 
         layout.addStretch(1)
@@ -238,14 +169,8 @@ class AdvancedTab(QWidget):
     # ----------------------------------------------------------- handlers
     def _on_changed(self, *_args) -> None:
         self._config.auto_send = self._auto_send_cb.isChecked()
-        self._config.preserve_clipboard = self._preserve_cb.isChecked()
+        self._config.keep_transcript_on_clipboard = self._keep_clip_cb.isChecked()
         self._config.initial_prompt = self._prompt_edit.toPlainText().strip()
-        self._config.word_replacements = _parse_replacements(self._repl_edit.toPlainText())
-        self._config.strip_trailing_filler = self._strip_filler.isChecked()
-        self.config_changed.emit()
-
-    def _on_mute_key_captured(self, vk: int) -> None:
-        self._config.reverse_ptt_vk = vk
         self.config_changed.emit()
 
     def _on_cable_changed(self, *_args) -> None:
@@ -260,60 +185,6 @@ class AdvancedTab(QWidget):
         """Recolor the virtual-cable status dot to the accent (when shown)."""
         if self._status_dot is not None:
             self._status_dot.setStyleSheet(f"color: {primary}; font-size: 14px;")
-
-
-class _CaptureKeyButton(QPushButton):
-    """Click-to-capture keybind picker.
-
-    Normal state: shows the current VK's label (e.g. "F23"). Click to enter
-    capture mode — the next key press updates the bound VK. Pressing Esc
-    while capturing cancels. We capture via ``keyPressEvent`` rather than the
-    OS-level pynput hook so the button doesn't fight Slumbr's global Caps
-    Lock hook.
-    """
-
-    key_captured = Signal(int)  # the new VK
-
-    def __init__(self, initial_vk: int) -> None:
-        super().__init__()
-        self._vk = initial_vk
-        self._capturing = False
-        self.setMinimumWidth(180)
-        self.setObjectName("primary" if initial_vk else "")
-        self._refresh_label()
-        self.clicked.connect(self._start_capture)
-        self.setFocusPolicy(Qt.StrongFocus)
-
-    def _refresh_label(self) -> None:
-        if self._vk:
-            self.setText(f"{vk_label(self._vk)} (click to change)")
-        else:
-            self.setText("Click to set keybind")
-
-    def _start_capture(self) -> None:
-        self._capturing = True
-        self.setText("Press any key… (Esc to cancel)")
-        self.grabKeyboard()
-
-    def keyPressEvent(self, event: QKeyEvent) -> None:  # noqa: N802
-        if not self._capturing:
-            super().keyPressEvent(event)
-            return
-        if event.key() == Qt.Key_Escape:
-            self._capturing = False
-            self.releaseKeyboard()
-            self._refresh_label()
-            return
-        vk = event.nativeVirtualKey()
-        if vk:
-            self._vk = int(vk)
-            self.key_captured.emit(self._vk)
-        self._capturing = False
-        self.releaseKeyboard()
-        self._refresh_label()
-
-    def event(self, ev: QEvent) -> bool:
-        return super().event(ev)
 
 
 class _VBCableInstallDialog(QDialog):

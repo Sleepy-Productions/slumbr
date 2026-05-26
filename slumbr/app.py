@@ -359,7 +359,7 @@ class SlumbrApp:
         polished = polish(
             raw,
             replacements=self.config.word_replacements,
-            strip_filler=self.config.strip_trailing_filler,
+            strip_filler=True,  # always strip end-of-clip hallucinations — never a choice
         )
         log.info("transcript: %r", polished)
         log.debug("raw=%r polished=%r", raw, polished)
@@ -387,7 +387,8 @@ class SlumbrApp:
                 polished,
                 target_hwnd=self._paste_target_hwnd,
                 auto_send=self.config.auto_send,
-                preserve_clipboard=self.config.preserve_clipboard,
+                # "Keep transcript on clipboard" = don't restore the old clipboard.
+                preserve_clipboard=not self.config.keep_transcript_on_clipboard,
                 paste_method=self.config.paste_method,
             )
         except Exception as e:  # noqa: BLE001

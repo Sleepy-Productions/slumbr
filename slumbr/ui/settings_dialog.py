@@ -224,6 +224,9 @@ class SettingsDialog(QDialog):
         self.setWindowTitle("Slumbr — Settings")
         # No "?" help button in the title bar; it doesn't do anything.
         self.setWindowFlag(Qt.WindowContextHelpButtonHint, False)
+        # Real window controls — Settings can be minimized or maximized.
+        self.setWindowFlag(Qt.WindowMinimizeButtonHint, True)
+        self.setWindowFlag(Qt.WindowMaximizeButtonHint, True)
         if app_icon is not None:
             self.setWindowIcon(app_icon)
         self.setStyleSheet(_dialog_qss(*derive_accent(config.accent_color)))

@@ -97,6 +97,10 @@ class SlumbrConfig:
     input_device_name: str | None = None
     auto_send: bool = False
     preserve_clipboard: bool = True
+    # When True, Slumbr LEAVES the dictated text on your clipboard after
+    # pasting so you can paste that exact message again (the next dictation
+    # replaces it). When False, your previous clipboard contents are restored.
+    keep_transcript_on_clipboard: bool = False
     # Neutral default with a faint violet hint — keeps a fresh install reading
     # clean / black-and-white. Stays mid-tone on purpose (the accent doubles as
     # the primary-button background under light text). Users pick a vivid accent
