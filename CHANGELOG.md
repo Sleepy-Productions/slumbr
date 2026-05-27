@@ -4,9 +4,9 @@ All notable changes to Slumbr are documented in this file. The format follows [K
 
 Slumbr follows SemVer: **MAJOR** for breaking changes (config format / behavior), **MINOR** for new features, **PATCH** for fixes.
 
-## [1.0.0] — 2026-05-26
+## [1.0.0] — 2026-05-27
 
-The **1.0 public launch.** A reorganized Settings UI, a session-scoped History with a recovery safety net, proper Windows app identity (no more "pins as Python"), and a pile of polish + correctness fixes.
+The **1.0 public launch.** One-click installers that run on any PC, a reorganized Settings UI, a session-scoped History with a recovery safety net, proper Windows app identity (no more "pins as Python"), and a pile of polish + correctness fixes.
 
 ### Added
 - **Session logs + crash recovery.** When live History fills to 30 it rolls the batch into a temporary *session log* and the list resets fresh; rolled batches are browsable from a "Session logs" drill-in and cleared on a clean quit. If Slumbr closes unexpectedly, the last session's transcripts are written to `%APPDATA%\Slumbr\crash-logs\` and offered back via a Recover / Discard prompt on next launch; uncaught exceptions also drop a traceback crash log.
@@ -20,13 +20,17 @@ The **1.0 public launch.** A reorganized Settings UI, a session-scoped History w
 - **History is session-scoped** — resets each launch; the live list never exceeds 30 (older batches roll into session logs).
 - **Windows app identity (AUMID).** Set on the process and on both shortcuts, so the taskbar button, pinning, jump list, and Start all read "Slumbr" instead of the host `pythonw.exe` / "Python".
 - **Brand mark is fixed monochrome white** everywhere (shell icon, taskbar, About logo) — it never follows the user's accent.
-- **Source-install is the v1 path** — `install.ps1` from a clone; the unsigned `.exe` is deferred (Windows Defender quarantines it). README rewritten for source install.
+- **Ships as one-click installers** — a universal **CPU build** that runs on any x64 Windows PC, plus an **NVIDIA build** for GPU-accelerated dictation; the source install (`install.ps1` from a clone, which auto-detects hardware and installs the matching backend) is still fully supported.
 
 ### Fixed
 - **Recurring "pink desktop icon."** `install.ps1` now busts the Windows shell icon cache (drop the cache DBs + `ie4uinit -show` + `SHChangeNotify`) so a stale tinted icon can't linger — the baked `.ico` and all runtime icons were already white.
 - **White-on-white accent contrast.** Accent-filled controls compute a contrast-aware text color, so a light/white accent gets dark text instead of vanishing.
 - **Paste-method labels** corrected — Ctrl+V default, Ctrl+Shift+V fallback, "type each character" for clipboard-hostile apps.
 - Tray menu drops the stale "Reverse PTT (Discord)" item.
+- **No more hard-exit when a GPU backend can't load.** If the chosen engine fails to build or warm up on a machine (driver mismatch, missing wheels, out-of-memory), Slumbr falls back to the bundled Moonshine CPU engine and keeps working instead of quitting.
+- **Frozen builds guide you to the right download.** If a packaged build doesn't include your hardware's GPU backend, the first-launch wizard runs the bundled CPU engine and points you at the matching build — instead of attempting an in-app install that can't work in a packaged app.
+- **Startup `mic_mirror` race** that logged a harmless error on every launch is closed.
+- Declared supported Python as **3.10–3.12** in metadata (onnxruntime / sherpa-onnx wheels lag on 3.13).
 
 ## [0.2.0] — 2026-05-22
 
