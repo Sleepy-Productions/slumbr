@@ -138,8 +138,9 @@ class VoiceTab(QWidget):
         layout.addWidget(heading("Voice", size=28))
         layout.addWidget(
             subheading(
-                "Your mic and language. Applied immediately, no restart. Vocabulary "
-                "hints and auto-corrections are on the Advanced tab."
+                "Your mic and the active mode's language. Applied immediately, no "
+                "restart. Each mode carries its own language — switch modes on the "
+                "Modes tab. Vocabulary hints live on Advanced."
             )
         )
 
@@ -164,6 +165,10 @@ class VoiceTab(QWidget):
         )
 
         sl.addWidget(field_label("Language"))
+        self._lang_scope = field_hint(
+            f"Applies to the active mode: {config.active_profile().label}."
+        )
+        sl.addWidget(self._lang_scope)
         self._language_combo = NoScrollComboBox()
         self._language_combo.addItem("English (recommended)", userData="en")
         self._language_combo.addItem("Auto-detect", userData="")
@@ -172,7 +177,7 @@ class VoiceTab(QWidget):
         self._language_combo.addItem("German", userData="de")
         self._language_combo.addItem("Portuguese", userData="pt")
         self._language_combo.addItem("Japanese", userData="ja")
-        i = self._language_combo.findData(config.language or "")
+        i = self._language_combo.findData(config.active_profile().language or "")
         if i >= 0:
             self._language_combo.setCurrentIndex(i)
         self._language_combo.currentIndexChanged.connect(self._on_changed)
@@ -276,8 +281,19 @@ class VoiceTab(QWidget):
     def _on_changed(self, *_args) -> None:
         self._config.input_device_name = self._device_combo.currentData()
         lang = self._language_combo.currentData()
-        self._config.language = lang if lang is not None else ""
+        # Language belongs to the ACTIVE mode (each mode is a full persona).
+        self._config.active_profile().language = lang if lang is not None else ""
         self.config_changed.emit()
+
+    def reload_from_config(self) -> None:
+        """Re-point the language control at the (possibly newly) active mode —
+        called by the dialog when the active mode changes elsewhere."""
+        p = self._config.active_profile()
+        self._language_combo.blockSignals(True)
+        i = self._language_combo.findData(p.language or "")
+        self._language_combo.setCurrentIndex(i if i >= 0 else 0)
+        self._language_combo.blockSignals(False)
+        self._lang_scope.setText(f"Applies to the active mode: {p.label}.")
 
     def _on_mic_routing_toggle(self, checked: bool) -> None:
         self._config.mic_routing_enabled = checked

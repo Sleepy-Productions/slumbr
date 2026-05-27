@@ -52,6 +52,7 @@ from .tabs.behavior import BehaviorTab
 from .tabs.customization import CustomizationTab
 from .tabs.engine import EngineTab
 from .tabs.history import HistoryTab
+from .tabs.modes import ModesTab
 from .tabs.shortcuts import ShortcutsTab
 from .tabs.voice import VoiceTab
 
@@ -252,6 +253,7 @@ class SettingsDialog(QDialog):
         # the callbacks wired below).
         self._engine_tab = EngineTab(config)
         self._voice_tab = VoiceTab(config)
+        self._modes_tab = ModesTab(config)
         self._behavior_tab = BehaviorTab(config)
         self._customization_tab = CustomizationTab(config)
         self._shortcuts_tab = ShortcutsTab(config)
@@ -277,6 +279,10 @@ class SettingsDialog(QDialog):
         # Wire signals → app callbacks
         self._engine_tab.config_changed.connect(self._handle_config_changed)
         self._voice_tab.config_changed.connect(self._handle_config_changed)
+        self._modes_tab.config_changed.connect(self._handle_config_changed)
+        # When the active mode changes, the per-mode tabs must re-read the new
+        # mode's values before the normal config-changed path runs.
+        self._modes_tab.active_mode_changed.connect(self._on_active_mode_changed)
         self._behavior_tab.config_changed.connect(self._handle_config_changed)
         self._customization_tab.config_changed.connect(self._handle_config_changed)
         self._advanced_tab.config_changed.connect(self._handle_config_changed)
@@ -304,6 +310,7 @@ class SettingsDialog(QDialog):
             ("header", "SETUP", None),
             ("page", "Engine", self._engine_tab),
             ("page", "Voice", self._voice_tab),
+            ("page", "Modes", self._modes_tab),
             ("page", "Shortcuts", self._shortcuts_tab),
             ("header", "PREFERENCES", None),
             ("page", "Behavior", self._behavior_tab),
@@ -367,9 +374,17 @@ class SettingsDialog(QDialog):
         self.setStyleSheet(_dialog_qss(primary, hover, deep, pill_bg))
         self._engine_tab.reflect_accent(primary)
         self._shortcuts_tab.reflect_accent(primary, deep)
+        self._modes_tab.reflect_accent(primary, deep)
         self._voice_tab.reflect_accent(primary)  # cable status dot lives here now
         self._customization_tab.reflect_accent(primary)
         self._about_tab.reflect_accent(primary)
+
+    def _on_active_mode_changed(self) -> None:
+        """The Modes tab switched the active mode — reload the tabs that edit
+        per-mode fields so they show the new mode's values."""
+        self._voice_tab.reload_from_config()
+        self._behavior_tab.reload_from_config()
+        self._advanced_tab.reload_from_config()
 
     def _handle_hotkey_changed(self, vks: list[int]) -> None:
         # The app callback owns persistence + the live rebind + tray label

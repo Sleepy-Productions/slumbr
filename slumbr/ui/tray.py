@@ -81,12 +81,17 @@ class SlumbrTray:
         on_restart: Callable[[], None],
         config: SlumbrConfig,
         on_quick_toggle: Callable[[str], None],
+        on_mode_selected: Callable[[str], None],
         hotkey_label: str = "Caps Lock",
     ) -> None:
         self._on_toggle = on_toggle
         self._on_settings = on_settings
         self._on_quit = on_quit
         self._on_restart = on_restart
+        # Mode submenu: a radio group mirroring config.modes. Clicking one fires
+        # ``on_mode_selected(mode_id)`` which sets the active mode and routes
+        # through the app's normal config-changed path.
+        self._on_mode_selected = on_mode_selected
         # Quick-toggle support: tray menu shows a small set of checkbox
         # items mirroring high-frequency settings (mic routing, reverse
         # PTT, compact popup, follow cursor). Clicking one fires
@@ -110,9 +115,35 @@ class SlumbrTray:
             self._icon.title = self._title_for_state(self._state)
 
     def _title_for_state(self, state: State) -> str:
+        mode = f" · {self._config.active_profile().label}"
         if state is State.IDLE:
-            return f"Slumbr — Idle (tap {self._hotkey_label} to dictate)"
-        return f"Slumbr — {state.value.capitalize()}"
+            return f"Slumbr — Idle (tap {self._hotkey_label} to dictate){mode}"
+        return f"Slumbr — {state.value.capitalize()}{mode}"
+
+    def _mode_menu(self) -> pystray.Menu:
+        """Radio submenu of the configured modes; the checked one re-reads
+        ``config.active_mode`` each time the menu opens so it stays accurate
+        even when the mode changes via the hotkey or Settings."""
+        items = [
+            pystray.MenuItem(
+                m.label,
+                self._make_mode_action(m.id),
+                checked=self._make_mode_checked(m.id),
+                radio=True,
+            )
+            for m in self._config.modes
+        ]
+        return pystray.Menu(*items)
+
+    # pystray's _assert_action only accepts actions of arity 0/1/2 — a
+    # ``lambda ..., mid=m.id`` default-arg trick bumps the count to 3 and is
+    # rejected, so bind the per-item id via these closure factories instead
+    # (the returned lambdas keep the 2-arg action / 1-arg checked signatures).
+    def _make_mode_action(self, mode_id: str) -> Callable[[object, object], None]:
+        return lambda _icon, _item: self._on_mode_selected(mode_id)
+
+    def _make_mode_checked(self, mode_id: str) -> Callable[[object], bool]:
+        return lambda _item: self._config.active_mode == mode_id
 
     def _build_menu(self) -> pystray.Menu:
         # The 'Last: …' header is enabled=False so it renders greyed-out
@@ -144,6 +175,8 @@ class SlumbrTray:
                 lambda _icon, _item: self._on_quick_toggle("popup_follow_cursor"),
                 checked=lambda _item: self._config.popup_follow_cursor,
             ),
+            pystray.Menu.SEPARATOR,
+            pystray.MenuItem("Mode", self._mode_menu()),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem(
                 "Toggle Recording",
@@ -204,9 +237,11 @@ class SlumbrTray:
     def refresh_menu(self) -> None:
         """Force pystray to repaint the menu (e.g. after a fresh transcript
         so the 'Last:' header reflects it without waiting for the user to
-        reopen the menu).
+        reopen the menu). Also refreshes the tooltip so an active-mode change
+        (hotkey / Settings) shows up without waiting for the next state change.
         """
         if self._icon is not None:
+            self._icon.title = self._title_for_state(self._state)
             self._icon.update_menu()
 
     def stop(self) -> None:

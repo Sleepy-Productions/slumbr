@@ -138,16 +138,22 @@ def _apply_replacements(text: str, replacements: dict[str, str]) -> str:
     return text
 
 
-def polish(
+def clean_base(
     text: str,
-    *,
     replacements: dict[str, str] | None = None,
-    strip_filler: bool = True,
+    *,
+    strip_filler: bool = False,
 ) -> str:
+    """Backend-agnostic cleanup shared by every formatter (prose + code).
+
+    Strips whitespace, collapses runaway ASR repetition, optionally drops
+    Whisper's trailing hallucinations, and applies the user's find-replace
+    map — but does NOT touch capitalization or terminal punctuation, so it's
+    safe to run ahead of either the prose polish or the code grammar.
+    """
     text = text.strip()
     if not text:
         return text
-
     # Collapse runaway repetition first — it's the most destructive failure
     # and shrinking it makes the rest of the pass cheaper + cleaner.
     text = _collapse_repetition(text)
@@ -155,6 +161,16 @@ def polish(
         text = _strip_trailing_filler(text).strip()
     if replacements:
         text = _apply_replacements(text, replacements).strip()
+    return text
+
+
+def polish(
+    text: str,
+    *,
+    replacements: dict[str, str] | None = None,
+    strip_filler: bool = True,
+) -> str:
+    text = clean_base(text, replacements, strip_filler=strip_filler)
     if not text:
         return text
 

@@ -46,12 +46,12 @@ from .audio.capture import SAMPLE_RATE, AudioRecorder
 from .audio.mirror import MicMirror
 from .bootstrap.install import relaunch_slumbr
 from .config import SlumbrConfig
+from .formatting import format_transcript
 from .input.foreground import ForegroundTracker
 from .input.hotkey import Hotkey
 from .input.keymap import combo_label
 from .input.mute_key import MuteKeyController
 from .input.paste import paste_text
-from .polish import polish
 from .state import State, StateMachine
 from .stt.protocol import Transcriber
 from .stt.worker import TranscribeWorker
@@ -75,6 +75,8 @@ class _Bridge(QObject):
     quit_requested = Signal()
     restart_requested = Signal()
     quick_toggle = Signal(str)      # SlumbrConfig field name (bool field)
+    mode_selected = Signal(str)     # ModeProfile id picked from the tray submenu
+    cycle_mode = Signal()           # cycle-mode hotkey pressed
     audio_chunk = Signal(object)    # numpy ndarray payload
 
 
@@ -214,6 +216,8 @@ class SlumbrApp:
         self.bridge.quit_requested.connect(self._on_quit, Qt.QueuedConnection)
         self.bridge.restart_requested.connect(self._on_restart, Qt.QueuedConnection)
         self.bridge.quick_toggle.connect(self._on_quick_toggle, Qt.QueuedConnection)
+        self.bridge.mode_selected.connect(self._on_mode_selected, Qt.QueuedConnection)
+        self.bridge.cycle_mode.connect(self._on_cycle_mode, Qt.QueuedConnection)
         self.bridge.audio_chunk.connect(self._on_audio_chunk, Qt.QueuedConnection)
 
         # ----- Audio recorder.
@@ -226,6 +230,12 @@ class SlumbrApp:
         #                         the virtual cable always hear the user
         #                         (except during dictation when MicMirror
         #                         is internally muted).
+        # Init the mic-mirror handle BEFORE the recorder: the recorder's
+        # continuous callback can fire the instant its stream opens, and
+        # ``_on_audio_continuous`` reads ``self.mic_mirror`` — assigning it
+        # here closes a startup race that logged a harmless AttributeError on
+        # every launch. ``_try_open_mic_mirror()`` populates it for real below.
+        self.mic_mirror: MicMirror | None = None
         self.recorder = AudioRecorder(
             device=self.config.input_device_name,
             on_chunk=self._on_audio_thread_chunk,
@@ -240,6 +250,7 @@ class SlumbrApp:
             on_restart=self.bridge.restart_requested.emit,
             config=self.config,
             on_quick_toggle=self.bridge.quick_toggle.emit,
+            on_mode_selected=self.bridge.mode_selected.emit,
             hotkey_label=combo_label(self.config.hotkey_vks),
         )
         self.tray.start()
@@ -250,6 +261,13 @@ class SlumbrApp:
             on_press=lambda: self.bridge.toggle.emit("hotkey"),
         )
         self.hotkey.start()
+
+        # ----- Optional cycle-mode hotkey. Only installed when the user has
+        # actually bound a combo — an empty list must NOT start a Hotkey, since
+        # ``Hotkey`` falls back to Caps Lock on an empty combo and would then
+        # collide with the dictation key.
+        self.cycle_hotkey: Hotkey | None = None
+        self._rebind_cycle_hotkey()
 
         # ----- Elapsed-timer for popup MM:SS during recording.
         self._elapsed_timer = QTimer()
@@ -274,8 +292,8 @@ class SlumbrApp:
         # active, Slumbr passes the real mic to a virtual cable device
         # that call apps read from. The cable is fed silence during
         # dictation so other apps hear nothing while Slumbr's own
-        # capture stream keeps producing transcripts.
-        self.mic_mirror: MicMirror | None = None
+        # capture stream keeps producing transcripts. (The handle itself is
+        # initialized to None up by the recorder to avoid a startup race.)
         self._try_open_mic_mirror()
 
         # ----- Settings dialog is built lazily on first open so startup
@@ -406,12 +424,11 @@ class SlumbrApp:
     def _on_transcribed(self, text: str) -> None:
         t_done = time.monotonic()
         raw = text.strip()
-        polished = polish(
-            raw,
-            replacements=self.config.word_replacements,
-            strip_filler=True,  # always strip end-of-clip hallucinations — never a choice
-        )
-        log.info("transcript: %r", polished)
+        # The active mode decides how the transcript is shaped (prose vs code)
+        # and how it's pasted (auto-send / paste method).
+        profile = self.config.active_profile()
+        polished = format_transcript(raw, profile)
+        log.info("transcript [%s]: %r", profile.id, polished)
         log.debug("raw=%r polished=%r", raw, polished)
         if not polished:
             self._reset_to_idle()
@@ -436,10 +453,10 @@ class SlumbrApp:
             paste_text(
                 polished,
                 target_hwnd=self._paste_target_hwnd,
-                auto_send=self.config.auto_send,
+                auto_send=profile.auto_send,
                 # "Keep transcript on clipboard" = don't restore the old clipboard.
                 preserve_clipboard=not self.config.keep_transcript_on_clipboard,
-                paste_method=self.config.paste_method,
+                paste_method=profile.paste_method,
             )
         except Exception as e:  # noqa: BLE001
             log.error("paste failed: %s", e)
@@ -561,14 +578,18 @@ class SlumbrApp:
             log.warning("could not save config: %s", e)
         # AudioRecorder picks up device on the next ``start()``.
         self.recorder.set_device(self.config.input_device_name)
-        # Push hot-tunable knobs into the live transcriber.
+        # Push hot-tunable knobs into the live transcriber — sourced from the
+        # ACTIVE MODE (each mode carries its own language + vocab hint).
+        profile = self.config.active_profile()
         try:
             self.transcriber.set_runtime_config(
-                language=self.config.language or None,
-                initial_prompt=self.config.initial_prompt,
+                language=profile.language or None,
+                initial_prompt=profile.initial_prompt,
             )
         except Exception as e:  # noqa: BLE001
             log.warning("transcriber.set_runtime_config failed: %s", e)
+        # Install / rebind / drop the optional cycle-mode hotkey per config.
+        self._rebind_cycle_hotkey()
         # Re-arm (or disarm) the reverse-PTT mute key per the new config.
         if self.config.reverse_ptt_enabled and self.config.reverse_ptt_vk:
             self.mute_key.arm(self.config.reverse_ptt_vk)
@@ -728,6 +749,50 @@ class SlumbrApp:
         log.info("quick-toggle %s -> %s", field_name, not current)
         self._on_config_changed()
 
+    # --------------------------------------------------------------- modes
+    def _rebind_cycle_hotkey(self) -> None:
+        """Install / rebind / tear down the optional cycle-mode hotkey to match
+        ``config.cycle_mode_vks``. An empty combo means unbound — we must NOT
+        keep a live Hotkey then (it would fall back to Caps Lock)."""
+        vks = self.config.cycle_mode_vks
+        if vks:
+            if self.cycle_hotkey is None:
+                self.cycle_hotkey = Hotkey(
+                    vks=vks, on_press=lambda: self.bridge.cycle_mode.emit()
+                )
+                self.cycle_hotkey.start()
+            else:
+                self.cycle_hotkey.set_vks(vks)
+        elif self.cycle_hotkey is not None:
+            self.cycle_hotkey.stop()
+            self.cycle_hotkey = None
+
+    def _on_mode_selected(self, mode_id: str) -> None:
+        """Tray submenu (or Modes tab) picked a mode. Set it active and route
+        through the normal config-changed path (save + re-tune transcriber +
+        refresh tray checkmarks/tooltip)."""
+        if not any(m.id == mode_id for m in self.config.modes):
+            log.warning("unknown mode id: %r", mode_id)
+            return
+        if mode_id == self.config.active_mode:
+            return
+        self.config.active_mode = mode_id
+        log.info("active mode -> %s", mode_id)
+        self._on_config_changed()
+        self.tray.notify(f"Mode: {self.config.active_profile().label}")
+
+    def _on_cycle_mode(self) -> None:
+        """Advance to the next mode in order (wraps). Bound to the cycle hotkey."""
+        modes = self.config.modes
+        if not modes:
+            return
+        ids = [m.id for m in modes]
+        try:
+            nxt = ids[(ids.index(self.config.active_mode) + 1) % len(ids)]
+        except ValueError:
+            nxt = ids[0]
+        self._on_mode_selected(nxt)
+
     # ------------------------------------------------------------- restart
     def _on_restart(self) -> None:
         """Spawn a fresh Slumbr in a detached process, then quit this one.
@@ -770,6 +835,9 @@ class SlumbrApp:
             self.mic_mirror.stop()
             self.mic_mirror = None
         self.hotkey.stop()
+        if self.cycle_hotkey is not None:
+            self.cycle_hotkey.stop()
+            self.cycle_hotkey = None
         self.foreground.stop()
         if self.recorder.is_recording():
             self.recorder.stop()

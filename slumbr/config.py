@@ -85,6 +85,74 @@ class BackendConfig:
         return cls(**kwargs)
 
 
+# ----------------------------------------------------------------- modes
+
+
+@dataclass
+class ModeProfile:
+    """A switchable dictation *mode* — a full persona.
+
+    A mode bundles everything that should change with context: its STT
+    ``language`` and vocab hint (``initial_prompt``), how the transcript is
+    shaped (``formatter``: ``"prose"`` for sentences vs ``"code"`` for source),
+    and the paste behavior (``auto_send`` / ``paste_method``). Switching modes
+    swaps the whole set. ``id`` is the stable key the tray / hotkey reference;
+    ``label`` is what the user sees.
+
+    v1 ships three fixed built-ins (Notes / LLM Chat / Code). The ``language``
+    field is wired now but all built-ins ship English — real foreign-language
+    modes wait on hot engine-swap (Moonshine is English-only and backend
+    changes need a restart today).
+    """
+
+    id: str = ""
+    label: str = ""
+    formatter: str = "prose"          # "prose" | "code"
+    language: str = "en"
+    initial_prompt: str = ""
+    word_replacements: dict[str, str] = field(default_factory=dict)
+    strip_trailing_filler: bool = True
+    auto_send: bool = False
+    paste_method: str = "ctrl_v"      # "ctrl_v" | "ctrl_shift_v" | "type"
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> ModeProfile:
+        known = {f.name for f in fields(cls)}
+        kwargs = {k: v for k, v in data.items() if k in known}
+        raw_repl = kwargs.get("word_replacements")
+        if isinstance(raw_repl, dict):
+            kwargs["word_replacements"] = {
+                str(k): str(v)
+                for k, v in raw_repl.items()
+                if str(k).strip() and isinstance(v, (str, int, float))
+            }
+        elif "word_replacements" in kwargs:
+            del kwargs["word_replacements"]
+        return cls(**kwargs)
+
+
+def _default_modes() -> list[ModeProfile]:
+    """The three fixed built-in modes seeded on first launch."""
+    return [
+        ModeProfile(id="notes", label="Notes", formatter="prose"),
+        ModeProfile(id="llm_chat", label="LLM Chat", formatter="prose", auto_send=True),
+        ModeProfile(
+            id="code", label="Code", formatter="code", strip_trailing_filler=False
+        ),
+    ]
+
+
+def _ensure_builtin_modes(parsed: list[ModeProfile]) -> list[ModeProfile]:
+    """Guarantee the three built-ins exist (in order), keeping any saved
+    edits to them, and preserve any future custom modes after them."""
+    by_id = {m.id: m for m in parsed}
+    builtins = _default_modes()
+    builtin_ids = {b.id for b in builtins}
+    result = [by_id.get(b.id, b) for b in builtins]
+    result.extend(m for m in parsed if m.id not in builtin_ids)
+    return result
+
+
 # ---------------------------------------------------------------- slumbr
 
 
@@ -136,6 +204,17 @@ class SlumbrConfig:
     # content precedes it — so a genuine short "thank you" is left alone.
     strip_trailing_filler: bool = True
 
+    # ----- Modes (switchable dictation personas) -----
+    # Each ModeProfile is a full persona (language + vocab + formatter +
+    # paste behavior). ``active_mode`` is the selected mode's id; runtime reads
+    # ``active_profile()`` rather than the legacy top-level knobs above (those
+    # remain as the seed source for an upgrading user's Notes mode).
+    # ``cycle_mode_vks`` is an OPTIONAL global hotkey combo that cycles modes;
+    # empty = unbound (switch via the tray submenu / Settings → Modes instead).
+    modes: list[ModeProfile] = field(default_factory=_default_modes)
+    active_mode: str = "notes"
+    cycle_mode_vks: list[int] = field(default_factory=list)
+
     # ----- Streaming engine experiment toggle -----
     streaming_visual_leading_edge: bool = False
 
@@ -180,6 +259,16 @@ class SlumbrConfig:
     # cleanly and downstream code can read it without KeyError).
     close_to_tray: bool = True
     close_choice_made: bool = True
+
+    # -------------------------------------------------------------- modes API
+    def active_profile(self) -> ModeProfile:
+        """The currently-selected mode (falls back to the first / a default)."""
+        for m in self.modes:
+            if m.id == self.active_mode:
+                return m
+        if self.modes:
+            return self.modes[0]
+        return ModeProfile(id="notes", label="Notes")
 
     # ---------------------------------------------------------- (de)serialize
     @classmethod
@@ -247,6 +336,43 @@ class SlumbrConfig:
         acc = kwargs.get("accent_color")
         if not isinstance(acc, str) or not acc.strip():
             kwargs.pop("accent_color", None)
+
+        # ----- modes: parse saved profiles, or seed the built-ins from the
+        # user's existing top-level knobs so an upgrade lands as "Notes" exactly.
+        raw_modes = data.get("modes")
+        if isinstance(raw_modes, list) and raw_modes:
+            parsed = [
+                ModeProfile.from_dict(m)
+                for m in raw_modes
+                if isinstance(m, dict)
+            ]
+            parsed = [m for m in parsed if m.id]
+            kwargs["modes"] = _ensure_builtin_modes(parsed) if parsed else _default_modes()
+        else:
+            modes = _default_modes()
+            notes = modes[0]  # carry the pre-modes config into the Notes persona
+            notes.language = str(data.get("language", notes.language)) or notes.language
+            notes.initial_prompt = str(data.get("initial_prompt", notes.initial_prompt))
+            notes.word_replacements = dict(kwargs.get("word_replacements", {}))
+            if isinstance(data.get("strip_trailing_filler"), bool):
+                notes.strip_trailing_filler = data["strip_trailing_filler"]
+            if isinstance(data.get("auto_send"), bool):
+                notes.auto_send = data["auto_send"]
+            if isinstance(data.get("paste_method"), str):
+                notes.paste_method = data["paste_method"]
+            kwargs["modes"] = modes
+
+        # ----- optional cycle-mode hotkey combo
+        raw_cyc = data.get("cycle_mode_vks")
+        if isinstance(raw_cyc, list):
+            kwargs["cycle_mode_vks"] = [
+                int(v) for v in raw_cyc if isinstance(v, (int, float))
+            ]
+
+        # ----- clamp active_mode to an existing mode id
+        mode_ids = {m.id for m in kwargs["modes"]}
+        if kwargs.get("active_mode") not in mode_ids:
+            kwargs["active_mode"] = "notes" if "notes" in mode_ids else next(iter(mode_ids))
 
         return cls(**kwargs)
 

@@ -43,10 +43,15 @@ class AdvancedTab(QWidget):
 
         # ===== Pasting extras =====
         _card, sl = section_card("Pasting")
+        self._scope = field_hint(
+            f"Auto-send & vocabulary apply to the active mode: "
+            f"{config.active_profile().label}."
+        )
+        sl.addWidget(self._scope)
         self._auto_send_cb = QCheckBox(
             "Auto-send — press Enter right after your second hotkey tap"
         )
-        self._auto_send_cb.setChecked(config.auto_send)
+        self._auto_send_cb.setChecked(config.active_profile().auto_send)
         self._auto_send_cb.toggled.connect(self._on_changed)
         sl.addWidget(self._auto_send_cb)
         sl.addWidget(
@@ -79,7 +84,7 @@ class AdvancedTab(QWidget):
             )
         )
         self._prompt_edit = QPlainTextEdit()
-        self._prompt_edit.setPlainText(config.initial_prompt)
+        self._prompt_edit.setPlainText(config.active_profile().initial_prompt)
         self._prompt_edit.setPlaceholderText(
             "Slumbr, Sleepy Productions, PySide6, faster-whisper, sherpa-onnx..."
         )
@@ -96,7 +101,23 @@ class AdvancedTab(QWidget):
 
     # ----------------------------------------------------------- handlers
     def _on_changed(self, *_args) -> None:
-        self._config.auto_send = self._auto_send_cb.isChecked()
+        # Auto-send + vocabulary are per-mode; keep-on-clipboard stays global.
+        profile = self._config.active_profile()
+        profile.auto_send = self._auto_send_cb.isChecked()
+        profile.initial_prompt = self._prompt_edit.toPlainText().strip()
         self._config.keep_transcript_on_clipboard = self._keep_clip_cb.isChecked()
-        self._config.initial_prompt = self._prompt_edit.toPlainText().strip()
         self.config_changed.emit()
+
+    def reload_from_config(self) -> None:
+        """Re-point the per-mode controls at the active mode (called when the
+        active mode changes elsewhere)."""
+        p = self._config.active_profile()
+        self._auto_send_cb.blockSignals(True)
+        self._auto_send_cb.setChecked(p.auto_send)
+        self._auto_send_cb.blockSignals(False)
+        self._prompt_edit.blockSignals(True)
+        self._prompt_edit.setPlainText(p.initial_prompt)
+        self._prompt_edit.blockSignals(False)
+        self._scope.setText(
+            f"Auto-send & vocabulary apply to the active mode: {p.label}."
+        )
