@@ -36,10 +36,10 @@ _TERMINATORS = frozenset(".!?,;:")
 # Tuned to NEVER touch natural speech: only multi-word phrases repeated 4+
 # times, or a single word repeated 6+ times ("you you you you you you"), get
 # collapsed — real emphasis ("no no no", "really really") is left alone.
-_REPEAT_MAX_PERIOD = 16        # longest phrase (in words) we scan for looping
-_REPEAT_MIN_REPS_PHRASE = 4    # collapse a >=2-word block at this many reps
-_REPEAT_MIN_REPS_WORD = 6      # single-word block needs more (spare emphasis)
-_REPEAT_MIN_WORDS = 8          # below this the text is too short to be a loop
+_REPEAT_MAX_PERIOD = 16  # longest phrase (in words) we scan for looping
+_REPEAT_MIN_REPS_PHRASE = 4  # collapse a >=2-word block at this many reps
+_REPEAT_MIN_REPS_WORD = 6  # single-word block needs more (spare emphasis)
+_REPEAT_MIN_WORDS = 8  # below this the text is too short to be a loop
 
 
 def _norm_word(w: str) -> str:
@@ -83,6 +83,7 @@ def _collapse_repetition(text: str) -> str:
                 break  # restart the scan on the shrunk text
     return " ".join(words)
 
+
 # Canonical Whisper trailing hallucinations (lowercased, no trailing
 # punctuation). These are phrases the model emits on silence/music at the
 # end of a clip — they're almost never something the user dictated mid-
@@ -105,7 +106,9 @@ _TRAILING_FILLER: tuple[str, ...] = (
 _MIN_WORDS_AFTER_STRIP = 4
 
 _TRAILING_RE = re.compile(
-    r"\s*[,.!?\-\s]*(?:" + "|".join(re.escape(p.rstrip(".")) for p in _TRAILING_FILLER) + r")[\s.!?]*$",
+    r"\s*[,.!?\-\s]*(?:"
+    + "|".join(re.escape(p.rstrip(".")) for p in _TRAILING_FILLER)
+    + r")[\s.!?]*$",
     re.IGNORECASE,
 )
 

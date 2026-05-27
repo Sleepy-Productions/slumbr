@@ -70,9 +70,9 @@ class BackendConfig:
 
     name: str
     model: str
-    compute_type: str | None = None    # ct2 only
-    threads: int | None = None         # whispercpp / moonshine CPU thread count
-    device_index: int = 0              # multi-GPU systems
+    compute_type: str | None = None  # ct2 only
+    threads: int | None = None  # whispercpp / moonshine CPU thread count
+    device_index: int = 0  # multi-GPU systems
     extra: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
@@ -106,7 +106,7 @@ class SlumbrConfig:
     # the primary-button background under light text). Users pick a vivid accent
     # (e.g. a violet like #794fb5) in Settings → Customization.
     accent_color: str = "#7E7A92"
-    paste_method: str = "ctrl_v"   # "ctrl_v" | "ctrl_shift_v" | "type"
+    paste_method: str = "ctrl_v"  # "ctrl_v" | "ctrl_shift_v" | "type"
 
     # ----- Hotkey -----
     # ``hotkey_vks`` is the combo: a list of 1–4 Windows VK codes that must
@@ -220,7 +220,8 @@ class SlumbrConfig:
             legacy_ct = str(data.get("compute_type") or "int8_float16")
             log.info(
                 "migrating legacy config to BackendConfig(cuda_ct2, %s, %s)",
-                legacy_model, legacy_ct,
+                legacy_model,
+                legacy_ct,
             )
             kwargs["backend"] = BackendConfig(
                 name="cuda_ct2",

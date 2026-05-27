@@ -151,9 +151,7 @@ class HistoryTab(QWidget):
         # Copy a transcript out: double-click, right-click, or select + Ctrl+C.
         lw.itemDoubleClicked.connect(self._copy_item)
         lw.setContextMenuPolicy(Qt.CustomContextMenu)
-        lw.customContextMenuRequested.connect(
-            lambda pos, _l=lw: self._show_context_menu(_l, pos)
-        )
+        lw.customContextMenuRequested.connect(lambda pos, _l=lw: self._show_context_menu(_l, pos))
         sc = QShortcut(QKeySequence.StandardKey.Copy, lw)
         sc.activated.connect(lambda _l=lw: self._copy_item(_l.currentItem()))
         return lw
@@ -205,9 +203,7 @@ class HistoryTab(QWidget):
             return
         # rows are newest-first in the view; copy oldest-first so it reads as a
         # chronological log.
-        blob = "\n".join(
-            f"[{it.data(_TS_ROLE)}] {it.data(_TEXT_ROLE)}" for it in reversed(rows)
-        )
+        blob = "\n".join(f"[{it.data(_TS_ROLE)}] {it.data(_TEXT_ROLE)}" for it in reversed(rows))
         QApplication.clipboard().setText(blob)
         QToolTip.showText(QCursor.pos(), f"Copied {len(rows)} transcripts ✓", self)
 

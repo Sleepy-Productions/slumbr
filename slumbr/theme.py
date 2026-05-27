@@ -33,9 +33,9 @@ TEXT_SECONDARY = "#9A9A9A"  # neutral gray — secondary text hierarchy only
 
 # State semantics — referenced by tray and popup (monochrome)
 COLOR_IDLE = "#6A6A6A"  # dim neutral gray (idle tray dot)
-COLOR_RECORDING = VIOLET_PRIMARY     # white
-COLOR_TRANSCRIBING = VIOLET_DEEP     # gray
-COLOR_PASTING = VIOLET_DEEP          # gray
+COLOR_RECORDING = VIOLET_PRIMARY  # white
+COLOR_TRANSCRIBING = VIOLET_DEEP  # gray
+COLOR_PASTING = VIOLET_DEEP  # gray
 COLOR_SENT = "#5FB87A"  # green — brief "✓ Sent" flash (functional success signal)
 COLOR_ERROR = "#E0685F"  # red — brief "✗ Failed" flash (functional error signal)
 
@@ -55,8 +55,8 @@ FONT_MONO = "Consolas"
 SPACE_XS, SPACE_SM, SPACE_MD, SPACE_LG, SPACE_XL = 4, 8, 12, 16, 24
 
 # Radius scale — one default, collapsing the old 5/6/10/11/12 sprawl.
-RADIUS_XS = 6     # small chips, checkbox indicator
-RADIUS_MD = 8     # default: buttons, combos
+RADIUS_XS = 6  # small chips, checkbox indicator
+RADIUS_MD = 8  # default: buttons, combos
 RADIUS_CARD = 12  # cards, text areas, lists
 RADIUS_PILL = 999
 
@@ -92,6 +92,7 @@ def load_app_fonts(app) -> None:
 # drives the whole UI. From the single picked color we derive the lighter
 # "hover" and darker "deep" shades the stylesheets need, so one pick recolors
 # everything coherently.
+
 
 def _hex_to_rgb(h: str) -> tuple[int, int, int]:
     h = h.lstrip("#")
@@ -154,6 +155,6 @@ def derive_accent(accent_hex: str) -> tuple[str, str, str, str]:
         rgb = _hex_to_rgb(VIOLET_PRIMARY)
     primary = f"#{rgb[0]:02X}{rgb[1]:02X}{rgb[2]:02X}"
     hover = _mix(rgb, (255, 255, 255), 0.16)  # 16% toward white
-    deep = _mix(rgb, (0, 0, 0), 0.22)         # 22% toward black
+    deep = _mix(rgb, (0, 0, 0), 0.22)  # 22% toward black
     pill_bg = f"rgba({rgb[0]}, {rgb[1]}, {rgb[2]}, 40)"
     return primary, hover, deep, pill_bg

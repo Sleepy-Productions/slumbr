@@ -58,9 +58,7 @@ class MoonshineTranscriber:
         # Only base + tiny exist in the sherpa-onnx zoo; anything else
         # (incl. the legacy default) resolves to base.
         variant = "tiny" if "tiny" in (cfg.model or "").lower() else "base"
-        log.info(
-            "loading Moonshine %s offline recognizer (%d threads)...", variant, threads
-        )
+        log.info("loading Moonshine %s offline recognizer (%d threads)...", variant, threads)
         t0 = time.monotonic()
         files = _ensure_moonshine(variant)
         self._recognizer = sherpa_onnx.OfflineRecognizer.from_moonshine(
@@ -110,9 +108,7 @@ class MoonshineTranscriber:
         polished = self._punctuate(text)
         dur = time.monotonic() - t0
         audio_s = len(audio) / 16000
-        log.info(
-            "Moonshine transcribed %.1fs of audio in %.2fs", audio_s, dur
-        )
+        log.info("Moonshine transcribed %.1fs of audio in %.2fs", audio_s, dur)
         return polished
 
     def set_runtime_config(

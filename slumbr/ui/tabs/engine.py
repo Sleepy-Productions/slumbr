@@ -149,7 +149,7 @@ class EngineTab(QWidget):
         super().__init__()
         self._config = config
         self._accent = config.accent_color  # tier-card chips/checks/active border
-        self._hw_chips: list[QLabel] = []   # GPU/CPU row labels, restyled on accent change
+        self._hw_chips: list[QLabel] = []  # GPU/CPU row labels, restyled on accent change
         self._notice_dot: QLabel | None = None
         if self._config.backend is None:
             self._config.backend = BackendConfig(
@@ -343,7 +343,9 @@ class EngineTab(QWidget):
 
     # ------------------------------------------------------- pick handlers
 
-    def _selected_key(self, cards: list[tuple[_OptionCard, Option]], value: str | None) -> str | None:
+    def _selected_key(
+        self, cards: list[tuple[_OptionCard, Option]], value: str | None
+    ) -> str | None:
         for _card, opt in cards:
             if opt.value == value:
                 return opt.key

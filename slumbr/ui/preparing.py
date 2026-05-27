@@ -71,7 +71,7 @@ class _EngineWorker(QObject):
     """Builds + warms the transcriber and the streaming engine off the main
     thread. None of these are Qt objects, so they're safe to construct here."""
 
-    ready = Signal(object, object)   # (transcriber, streaming_engine)
+    ready = Signal(object, object)  # (transcriber, streaming_engine)
     failed = Signal(str)
     fell_back = Signal(object, str)  # (fallback BackendConfig, human reason)
 
@@ -186,9 +186,7 @@ class _PreparingDialog(QDialog):
         lay.addWidget(bar)
 
 
-def prepare_engines(
-    config: SlumbrConfig, app_icon: QIcon | None = None
-) -> tuple[object, object]:
+def prepare_engines(config: SlumbrConfig, app_icon: QIcon | None = None) -> tuple[object, object]:
     """Build + warm the transcriber and streaming engine, showing a progress
     dialog if it's slow. Returns ``(transcriber, streaming_engine)``.
 

@@ -107,9 +107,7 @@ class InstallWorker(QObject):
                 creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
             )
         except OSError as e:
-            self.finished.emit(
-                InstallResult(success=False, summary=f"could not start pip: {e}")
-            )
+            self.finished.emit(InstallResult(success=False, summary=f"could not start pip: {e}"))
             return
 
         assert self._proc.stdout is not None

@@ -37,18 +37,22 @@ def build_transcriber(
         # Same engine; cpu_ct2 forces device="cpu" (real Whisper accuracy
         # on no-GPU machines). See WhisperCT2Transcriber.
         from .backends.whisper_ct2 import WhisperCT2Transcriber  # noqa: PLC0415
+
         return WhisperCT2Transcriber(cfg, language=language, initial_prompt=initial_prompt)
 
     if name == "moonshine":
         from .backends.moonshine import MoonshineTranscriber  # noqa: PLC0415
+
         return MoonshineTranscriber(cfg, language=language, initial_prompt=initial_prompt)
 
     if name == "directml":
         from .backends.directml import DirectMLTranscriber  # noqa: PLC0415
+
         return DirectMLTranscriber(cfg, language=language, initial_prompt=initial_prompt)
 
     if name in ("whispercpp_sycl", "whispercpp_cpu"):
         from .backends.whispercpp import WhisperCppTranscriber  # noqa: PLC0415
+
         return WhisperCppTranscriber(cfg, language=language, initial_prompt=initial_prompt)
 
     raise ValueError(f"unknown backend name: {name!r}")

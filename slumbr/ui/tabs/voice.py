@@ -62,12 +62,12 @@ _DISCORD_MUTE_HELP = (
 # loopback/line sources. Hidden from the mic picker — the user wants to pick a
 # MIC, and "System default" already covers default routing.
 _NON_MIC_KEYWORDS: tuple[str, ...] = (
-    "sound mapper",           # MME default-router alias
+    "sound mapper",  # MME default-router alias
     "primary sound capture",  # DirectSound default-router alias
-    "stereo mix",             # loopback (record system audio)
-    "what u hear",            # loopback (Creative)
-    "wave out mix",           # loopback
-    "line in",                # line input, not a mic
+    "stereo mix",  # loopback (record system audio)
+    "what u hear",  # loopback (Creative)
+    "wave out mix",  # loopback
+    "line in",  # line input, not a mic
     "line-in",
 )
 

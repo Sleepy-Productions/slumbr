@@ -138,8 +138,11 @@ def _pid_create_time(pid: int) -> int | None:
         try:
             creation, exit_t, kernel_t, user_t = (wintypes.FILETIME() for _ in range(4))
             ok = k.GetProcessTimes(
-                h, ctypes.byref(creation), ctypes.byref(exit_t),
-                ctypes.byref(kernel_t), ctypes.byref(user_t),
+                h,
+                ctypes.byref(creation),
+                ctypes.byref(exit_t),
+                ctypes.byref(kernel_t),
+                ctypes.byref(user_t),
             )
             if not ok:
                 return None
@@ -216,13 +219,15 @@ def begin() -> None:
     sdir.mkdir(parents=True, exist_ok=True)
     try:
         _lock_path().write_text(
-            json.dumps({
-                "pid": os.getpid(),
-                "started_at": time.time(),
-                # Creation time of THIS process — lets the next launch tell a
-                # live instance from a recycled PID (see _owner_still_running).
-                "create_time": _pid_create_time(os.getpid()),
-            }),
+            json.dumps(
+                {
+                    "pid": os.getpid(),
+                    "started_at": time.time(),
+                    # Creation time of THIS process — lets the next launch tell a
+                    # live instance from a recycled PID (see _owner_still_running).
+                    "create_time": _pid_create_time(os.getpid()),
+                }
+            ),
             encoding="utf-8",
         )
     except OSError as e:

@@ -40,9 +40,9 @@ class Option:
     ``value`` is what gets written to ``BackendConfig``.
     """
 
-    key: str       # "recommended" | "balanced" | "light"
-    value: str     # backend name, model id, or compute_type string
-    note: str      # one-line descriptor shown under the value
+    key: str  # "recommended" | "balanced" | "light"
+    value: str  # backend name, model id, or compute_type string
+    note: str  # one-line descriptor shown under the value
 
 
 # Display text for each tier key (kept uniform across all three dimensions).
@@ -91,7 +91,7 @@ def hardware_rows(profile: HardwareProfile) -> list[tuple[str, str, str]]:
     cpu = _short_name(profile.cpu_brand) if profile.cpu_brand else "Detected (name unavailable)"
     if rows:  # a GPU does the heavy lifting → CPU runs the live layer
         rows.append(("CPU", cpu, "Live preview · VAD · punctuation"))
-    else:     # CPU-only machine → CPU does everything
+    else:  # CPU-only machine → CPU does everything
         rows.append(("CPU", cpu, "Moonshine · final transcribe + live preview"))
     return rows
 
@@ -108,7 +108,9 @@ def backend_options(profile: HardwareProfile) -> list[Option]:
     gpu = profile.best_gpu
     if gpu is not None and gpu.vendor == GpuVendor.NVIDIA and gpu.is_discrete:
         return [
-            Option("recommended", "cuda_ct2", "Faster-Whisper · CUDA — fastest on your NVIDIA GPU."),
+            Option(
+                "recommended", "cuda_ct2", "Faster-Whisper · CUDA — fastest on your NVIDIA GPU."
+            ),
             Option("balanced", "directml", "DirectML · DX12 — vendor-neutral GPU path."),
             Option("light", "moonshine", "Moonshine · CPU — no GPU load, very snappy."),
         ]
@@ -153,7 +155,7 @@ def _cuda_ladder_start(vram_gb: float) -> int:
         return 2  # small
     if vram_gb <= 0:
         return 2  # unknown — small is the safe, still-capable default
-    return 3      # base (tiny cards)
+    return 3  # base (tiny cards)
 
 
 def model_options(backend_name: str, profile: HardwareProfile) -> list[Option]:
@@ -162,7 +164,7 @@ def model_options(backend_name: str, profile: HardwareProfile) -> list[Option]:
     gpu = profile.best_gpu
     if backend_name == "cuda_ct2":
         vram = gpu.vram_gb if gpu else 0.0
-        ladder = _CUDA_LADDER[_cuda_ladder_start(vram):] or (_CUDA_LADDER[-1],)
+        ladder = _CUDA_LADDER[_cuda_ladder_start(vram) :] or (_CUDA_LADDER[-1],)
         return [
             Option(_TIER_KEYS[min(i, 2)], model, _CUDA_NOTES[model])
             for i, model in enumerate(ladder[:3])
@@ -171,7 +173,9 @@ def model_options(backend_name: str, profile: HardwareProfile) -> list[Option]:
         strong = gpu is not None and gpu.is_discrete and gpu.vram_gb >= 7.5
         if strong:
             return [
-                Option("recommended", "large-v3-turbo", "Fastest large-class accuracy on your GPU."),
+                Option(
+                    "recommended", "large-v3-turbo", "Fastest large-class accuracy on your GPU."
+                ),
                 Option("balanced", "medium", "More accurate, a bit heavier."),
                 Option("light", "small", "Fastest, lowest memory."),
             ]
@@ -373,6 +377,7 @@ def _cpu_thread_budget(profile: HardwareProfile) -> int:
     and the foreground app.
     """
     import os  # noqa: PLC0415
+
     total = os.cpu_count() or 4
     return max(2, total // 2)
 
@@ -385,7 +390,7 @@ def _short_name(name: str) -> str:
     name = name.strip()
     for stripped in ("NVIDIA ", "AMD ", "Intel(R) ", "Intel "):
         if name.startswith(stripped):
-            name = name[len(stripped):]
+            name = name[len(stripped) :]
             break
     # Drop registered/trademark marks wherever they sit ("Core(TM) i9" →
     # "Core i9"), then trailing fluff, then collapse any double spaces.

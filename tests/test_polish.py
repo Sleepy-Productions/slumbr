@@ -13,6 +13,7 @@ from slumbr.polish import polish
 # "invalid group reference", trailing "\" = "bad escape") or silently corrupt
 # output (\n -> newline). It runs on every transcript, so a crash = lost paste.
 
+
 def test_replacement_with_regex_backref_is_literal():
     assert polish("say foo now", replacements={"foo": r"\1"}) == r"Say \1 now."
 
@@ -41,9 +42,7 @@ def test_empty_in_empty_out():
 
 def test_strips_trailing_filler_when_real_content_precedes():
     assert polish("this is a real sentence thank you") == "This is a real sentence."
-    assert polish("okay so here is the plan thanks for watching") == (
-        "Okay so here is the plan."
-    )
+    assert polish("okay so here is the plan thanks for watching") == ("Okay so here is the plan.")
 
 
 def test_keeps_a_genuinely_short_thank_you():
@@ -57,9 +56,7 @@ def test_strip_filler_can_be_disabled():
 
 
 def test_word_replacements_whole_word_case_insensitive():
-    assert polish("i love keybinde", replacements={"keybinde": "keybinds"}) == (
-        "I love keybinds."
-    )
+    assert polish("i love keybinde", replacements={"keybinde": "keybinds"}) == ("I love keybinds.")
     # whole-word only — a substring inside a longer word is untouched
     out = polish("keybindes are great", replacements={"keybinde": "keybinds"})
     assert "keybindes" in out.lower()

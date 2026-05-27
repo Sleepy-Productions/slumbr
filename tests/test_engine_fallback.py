@@ -47,8 +47,8 @@ def test_falls_back_to_moonshine_when_primary_fails(monkeypatch):
 
     assert got.get("ready") is True
     assert "failed" not in got
-    assert got["fb"].name == "moonshine"          # fell back to the bundled CPU engine
-    assert built == ["cuda_ct2", "moonshine"]      # tried primary, then fallback
+    assert got["fb"].name == "moonshine"  # fell back to the bundled CPU engine
+    assert built == ["cuda_ct2", "moonshine"]  # tried primary, then fallback
 
 
 def test_no_fallback_loop_when_primary_is_already_moonshine(monkeypatch):
@@ -68,7 +68,7 @@ def test_no_fallback_loop_when_primary_is_already_moonshine(monkeypatch):
     w.run()
 
     assert "moonshine boom" in got.get("failed", "")
-    assert "ready" not in got and "fb" not in got   # no infinite fallback
+    assert "ready" not in got and "fb" not in got  # no infinite fallback
 
 
 def test_cpu_fallback_backend_is_moonshine():
@@ -88,11 +88,11 @@ def test_primary_model_bundled_is_model_specific(monkeypatch, tmp_path):
 
     moon = SlumbrConfig()
     moon.backend = BackendConfig(name="moonshine", model="moonshine-base-en-int8")
-    assert prep._primary_model_bundled(moon) is True   # trio bundled
+    assert prep._primary_model_bundled(moon) is True  # trio bundled
 
     cuda = SlumbrConfig()
     cuda.backend = BackendConfig(name="cuda_ct2", model="large-v3-turbo")
-    assert prep._primary_model_bundled(cuda) is False   # GPU model not bundled → still downloads
+    assert prep._primary_model_bundled(cuda) is False  # GPU model not bundled → still downloads
 
 
 def test_primary_model_bundled_false_when_not_frozen(monkeypatch):
