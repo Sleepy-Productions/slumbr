@@ -75,3 +75,28 @@ def test_cpu_fallback_backend_is_moonshine():
     fb = prep._cpu_fallback_backend()
     assert fb.name == "moonshine"
     assert fb.model == "moonshine-base-en-int8"
+
+
+def test_primary_model_bundled_is_model_specific(monkeypatch, tmp_path):
+    """The first-run dialog's "no download" line must be per-model: on the NVIDIA
+    build the Moonshine trio is bundled but the GPU Whisper model is NOT, so a
+    cuda_ct2 first run still downloads and must be reported as such."""
+    models = tmp_path / "models"
+    (models / "moonshine-base-en").mkdir(parents=True)
+    (models / "moonshine-base-en" / "tokens.txt").write_text("x")
+    monkeypatch.setattr(prep, "bundled_models_root", lambda: models)
+
+    moon = SlumbrConfig()
+    moon.backend = BackendConfig(name="moonshine", model="moonshine-base-en-int8")
+    assert prep._primary_model_bundled(moon) is True   # trio bundled
+
+    cuda = SlumbrConfig()
+    cuda.backend = BackendConfig(name="cuda_ct2", model="large-v3-turbo")
+    assert prep._primary_model_bundled(cuda) is False   # GPU model not bundled → still downloads
+
+
+def test_primary_model_bundled_false_when_not_frozen(monkeypatch):
+    monkeypatch.setattr(prep, "bundled_models_root", lambda: None)
+    cfg = SlumbrConfig()
+    cfg.backend = BackendConfig(name="moonshine", model="moonshine-base-en-int8")
+    assert prep._primary_model_bundled(cfg) is False

@@ -39,6 +39,24 @@ log = logging.getLogger(__name__)
 _SHOW_AFTER_MS = 500
 
 
+def _primary_model_bundled(config: SlumbrConfig) -> bool:
+    """True iff THIS config's primary model ships in the frozen bundle (so the
+    first-run dialog can honestly say "no download"). Model-specific on purpose:
+    the NVIDIA build bundles the Moonshine trio but NOT the GPU Whisper model,
+    so a cuda_ct2 first run still downloads — and the dialog must say so."""
+    root = bundled_models_root()
+    if root is None or config.backend is None:
+        return False
+    name = config.backend.name
+    model = (config.backend.model or "").lower()
+    if name in ("cuda_ct2", "cpu_ct2"):
+        return (root / f"whisper-{config.backend.model}" / "model.bin").is_file()
+    if name == "moonshine":
+        variant = "tiny" if "tiny" in model else "base"
+        return (root / f"moonshine-{variant}-en" / "tokens.txt").is_file()
+    return False
+
+
 def _cpu_fallback_backend() -> BackendConfig:
     """The universal safety net: Moonshine on CPU. It's bundled in every build
     (CPU + NVIDIA), needs no GPU, and only a one-time ~180 MB model download — so
@@ -202,7 +220,7 @@ def prepare_engines(
 
     model = config.backend.model if config.backend else "speech"
     dialog = _PreparingDialog(
-        model, app_icon, config.accent_color, bundled=bundled_models_root() is not None
+        model, app_icon, config.accent_color, bundled=_primary_model_bundled(config)
     )
 
     thread.start()
