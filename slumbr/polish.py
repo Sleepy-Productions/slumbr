@@ -132,7 +132,9 @@ def _apply_replacements(text: str, replacements: dict[str, str]) -> str:
         # Replace via a function so ``corrected`` is taken LITERALLY — a string
         # replacement would interpret backslash escapes / group refs (a user
         # typing "C:\1" or a trailing "\" would crash re.sub or corrupt output).
-        text = pattern.sub(lambda _m: corrected, text)
+        # Bind ``corrected`` as a default arg (not a free var) so it captures
+        # this iteration's value.
+        text = pattern.sub(lambda _m, _repl=corrected: _repl, text)
     return text
 
 
