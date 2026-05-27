@@ -134,7 +134,7 @@ def text_on(bg_hex: str) -> str:
     (e.g. a white primary button keeps black text)."""
     try:
         r, g, b = _hex_to_rgb(bg_hex)
-    except (ValueError, IndexError):
+    except (ValueError, IndexError, TypeError, AttributeError):
         return TEXT_PRIMARY
     # Perceptual (sRGB) luminance, 0..1.
     lum = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255
@@ -148,7 +148,9 @@ def derive_accent(accent_hex: str) -> tuple[str, str, str, str]:
     a malformed value."""
     try:
         rgb = _hex_to_rgb(accent_hex)
-    except (ValueError, IndexError):
+    except (ValueError, IndexError, TypeError, AttributeError):
+        # Malformed OR wrong-typed (a corrupt config can hand us a number/None,
+        # which would raise AttributeError on .lstrip()) — fall back to default.
         rgb = _hex_to_rgb(VIOLET_PRIMARY)
     primary = f"#{rgb[0]:02X}{rgb[1]:02X}{rgb[2]:02X}"
     hover = _mix(rgb, (255, 255, 255), 0.16)  # 16% toward white
