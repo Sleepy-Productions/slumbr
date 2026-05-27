@@ -20,13 +20,30 @@ Tap **Caps Lock** → a popup appears with a live audio meter and a transcript t
 
 ## Quick start
 
-1. **Install** — clone the repo and run one PowerShell command (below). No admin needed.
-2. **First launch sets itself up** — Slumbr detects your hardware and installs the right speech engine automatically.
+1. **Download + run the installer** for your hardware (below) — or install from source. No admin needed.
+2. **First launch sets itself up** — Slumbr detects your hardware and uses the right speech engine automatically.
 3. **Tap Caps Lock, speak, tap again** — your words land wherever your cursor is.
 
 ## Install
 
-Slumbr installs **from source** with a single script — a signed one-click installer is on the way as a fast-follow. Windows 10 / 11 (64-bit), no admin required.
+Windows 10 / 11 (64-bit), no admin required. Two ways in:
+
+### Option A — one-click installer (easiest)
+
+Grab the build for your hardware from the [**Releases**](https://github.com/SIeepyDev/slumbr/releases/latest) page:
+
+| Download | For | Notes |
+| --- | --- | --- |
+| **`slumbr-setup-cpu.exe`** | Any PC | Runs on every machine (NVIDIA / AMD / Intel / no GPU). CPU-speed transcription. Smallest download. |
+| **`slumbr-setup-nvidia.exe`** | NVIDIA GPU | GPU-accelerated (CUDA). Larger — bundles the CUDA runtime. |
+
+Not sure which? **Start with the CPU build** — it works everywhere, and you can switch to the GPU build any time. If a build doesn't match your GPU, Slumbr just runs on its built-in CPU engine and tells you which build to grab — it never leaves you stuck.
+
+> **"Windows protected your PC"?** Slumbr is open-source and not code-signed yet, so Windows SmartScreen flags it on first run. Click **More info → Run anyway**. (Code signing is on the roadmap.)
+
+### Option B — from source (auto-detects + GPU on any vendor)
+
+Installs from a clone and auto-installs the right backend for your hardware — including AMD / Intel DirectML:
 
 ```powershell
 git clone https://github.com/SIeepyDev/slumbr.git
@@ -54,7 +71,7 @@ cd slumbr
 .\.venv\Scripts\python.exe -m slumbr --debug # with verbose logs
 ```
 
-> **AMD / Intel GPU?** The DirectML path works from source today. **No GPU?** Moonshine runs great on a modern CPU — nothing extra to install.
+> **AMD / Intel GPU?** The DirectML path works from source today (Option B) — for the frozen installers, AMD/Intel run on the CPU engine. **No GPU?** Moonshine runs great on a modern CPU — nothing extra to install.
 
 ## How it works
 

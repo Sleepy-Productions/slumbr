@@ -7,7 +7,7 @@ Thanks for your interest. Slumbr is a small Windows-only dictation app maintaine
 Slumbr has a handful of deliberate design constraints. PRs that violate them will be redirected before review:
 
 - **Windows-only.** Slumbr talks directly to WASAPI, the Win32 keyboard hook, the Windows clipboard, and `SetForegroundWindow`. No cross-platform abstraction.
-- **CUDA required at runtime.** `faster-whisper` is configured for `device="cuda"` with `compute_type="int8"`. CPU fallback is not a goal.
+- **Pluggable, hardware-adaptive backends.** A first-launch wizard detects the user's GPU/CPU and picks a backend (NVIDIA CUDA · AMD/Intel DirectML · CPU). The CPU engine (Moonshine) is the universal fallback and runs on any machine — so don't hardcode one engine; everything goes behind the `Transcriber` protocol (`slumbr/stt/protocol.py`).
 - **Fully local at runtime.** The two ASR models download once from Hugging Face on first launch and are cached. After that, **no network calls** — that's the privacy promise.
 - **No paid / non-OSS dependencies.** PySide6 (LGPL) over PyQt6 (GPL) is intentional so the project can be redistributed freely.
 - **Tap-to-toggle UX.** Not press-and-hold, not wake-word. One press starts, the next stops.
@@ -38,7 +38,7 @@ ruff check .
 ruff format .
 ```
 
-Tests (when they exist — currently pre-alpha):
+Tests:
 
 ```powershell
 pytest
@@ -46,23 +46,28 @@ pytest
 
 ## Architecture in a paragraph
 
-Single Python process. One `QApplication`. A `pystray.Icon` runs the tray in its own thread. The state machine (`IDLE → RECORDING → TRANSCRIBING → PASTING → IDLE`) lives on the Qt main thread. **Two ASR engines** run in parallel: sherpa-onnx Zipformer (CPU, streaming) drives the popup partials while you speak; faster-whisper (CUDA, non-streaming) produces the final paste at Caps Lock release. PortAudio captures audio on its own callback thread and emits a Qt signal so the visualizer can paint safely on the main thread.
+Single Python process. One `QApplication`. A `pystray.Icon` runs the tray in its own thread. The state machine (`IDLE → RECORDING → TRANSCRIBING → PASTING → IDLE`) lives on the Qt main thread. The **final** transcribe is produced by a pluggable backend chosen for the user's hardware (faster-whisper/CUDA, ONNX DirectML, or Moonshine/CPU) via `slumbr/stt/factory.py`, run off the main thread in a `QThread`. A **streaming** engine (Moonshine + Silero VAD + online punctuation, always on CPU) drives the live popup partials while you speak. PortAudio captures audio on its own callback thread and emits a Qt signal so the visualizer can paint safely on the main thread.
 
 If you're touching threading code, read the docstrings at the top of `slumbr/app.py`, `slumbr/audio/capture.py`, and `slumbr/input/hotkey.py` first — they document why each thread exists and what it's allowed to do.
 
 ## File map
 
 - `slumbr/app.py` — `SlumbrApp` orchestrator. State machine, signal wiring, paste pipeline.
-- `slumbr/audio/capture.py` — always-on PortAudio stream + 500 ms pre-buffer + ring-buffer-to-Qt bridge.
-- `slumbr/stt/engine.py` — faster-whisper wrapper with warm-up + OOM-aware retry.
-- `slumbr/stt/streaming_engine.py` — sherpa-onnx Zipformer wrapper for live popup partials.
-- `slumbr/stt/worker.py` — QThread that runs Whisper transcription off the main thread.
-- `slumbr/input/hotkey.py` — Caps Lock low-level hook with full OS suppression.
-- `slumbr/input/foreground.py` — 10 Hz foreground-window tracker.
-- `slumbr/input/paste.py` — clipboard + Ctrl[+Shift]+V dispatcher, with tuned timing constants.
-- `slumbr/ui/main_window.py` / `popup.py` / `settings.py` / `tray.py` / `about.py` — Qt widgets.
-- `slumbr/theme.py` — single source of truth for the brand violet palette. **Never hardcode hex strings in widget code.**
-- `slumbr/config.py` — `SlumbrConfig` dataclass + atomic JSON persistence at `%APPDATA%\Slumbr\config.json`.
+- `slumbr/config.py` — `SlumbrConfig` + `BackendConfig` dataclasses, atomic JSON persistence at `%APPDATA%\Slumbr\config.json`.
+- `slumbr/hardware/probe.py` / `recommend.py` — detect the user's GPU/CPU and recommend a backend.
+- `slumbr/stt/protocol.py` — the `Transcriber` protocol every backend implements.
+- `slumbr/stt/factory.py` — builds the right backend from a `BackendConfig`.
+- `slumbr/stt/backends/{whisper_ct2,directml,whispercpp,moonshine}.py` — the backends (lazy-imported).
+- `slumbr/stt/streaming_engine.py` — Moonshine + Silero VAD + online punctuation for live popup partials.
+- `slumbr/stt/worker.py` — QThread that runs the final transcription off the main thread.
+- `slumbr/audio/capture.py` — always-on PortAudio stream + pre-buffer + ring-buffer-to-Qt bridge.
+- `slumbr/audio/mirror.py` — virtual-cable routing (universal reverse-PTT: mute other apps while dictating).
+- `slumbr/input/hotkey.py` / `keymap.py` — configurable 1–4 key combo hook with selective OS suppression.
+- `slumbr/input/foreground.py` / `mute_key.py` / `paste.py` — foreground tracker, reverse-PTT key sender, clipboard/type paste dispatcher.
+- `slumbr/ui/setup_wizard.py` — first-launch hardware-detect + backend picker. `preparing.py` — engine warm-up dialog (with CPU fallback).
+- `slumbr/ui/settings_dialog.py` + `ui/tabs/` — the tabbed Settings dialog. `popup.py` — the dictation popup. `tray.py` — the tray icon/menu.
+- `slumbr/theme.py` / `branding.py` — house design tokens (monochrome white + a user-pickable neutral accent) and the brand mark. **Pull colors from `theme.py`; don't hardcode hex in widget code.**
+- `slumbr/bootstrap/{install,vbcable}.py` — pip backend-install worker + VB-Cable driver installer.
 
 ## PR expectations
 
