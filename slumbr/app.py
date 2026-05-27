@@ -37,7 +37,7 @@ import time
 from pathlib import Path
 
 import numpy as np
-from PySide6.QtCore import QObject, Qt, QTimer, Signal
+from PySide6.QtCore import QFileSystemWatcher, QObject, Qt, QTimer, Signal
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication, QDialog
 
@@ -82,13 +82,13 @@ class SlumbrApp:
     def __init__(self) -> None:
         # ----- Taskbar/alt-tab identity. Must run before QApplication, else
         # Windows groups the app (when run via pythonw) under the generic
-        # Python icon instead of Slumbr's. No-op off Windows / on failure.
-        if sys.platform == "win32":
-            try:
-                import ctypes
-                ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("sleepydev.slumbr.v1")
-            except Exception:
-                pass
+        # Python icon instead of Slumbr's. Use the ONE canonical AUMID from
+        # winident — it MUST match the value stamped on the shortcuts
+        # (SleepyDev.Slumbr), or the pinned launcher and the live window won't
+        # unify into a single taskbar button. Idempotent; no-op off Windows.
+        from .winident import set_process_app_id
+
+        set_process_app_id()
 
         # ----- QApplication first, so the wizard can use Qt widgets.
         self.qapp = QApplication(sys.argv)
@@ -165,6 +165,19 @@ class SlumbrApp:
         # Drop this session's running marker now that we're committed to
         # running (past the wizard) — its absence next launch == clean exit.
         session_logs.begin()
+
+        # ----- Reopen-from-taskbar bridge. Slumbr lives in the tray, so when
+        # the Settings window is closed there's no visible window for Windows to
+        # re-activate when the pinned taskbar icon is clicked again. That second
+        # launch instead drops a "show.request" marker (see __main__) and exits;
+        # we watch the session dir for it and surface Settings — so clicking the
+        # pinned icon ALWAYS brings Slumbr forward, whether it was running or not.
+        self._reopen_watcher = QFileSystemWatcher()
+        try:
+            self._reopen_watcher.addPath(str(session_logs.session_dir()))
+            self._reopen_watcher.directoryChanged.connect(self._on_session_dir_changed)
+        except Exception:  # noqa: BLE001
+            log.warning("reopen watcher setup failed (non-fatal)", exc_info=True)
 
         # ----- Transcriber (primary STT) + streaming engine (live popup
         # partials, always Moonshine on CPU). Built on a worker thread
@@ -494,6 +507,17 @@ class SlumbrApp:
         dlg.show()
         dlg.raise_()
         dlg.activateWindow()
+
+    def _on_session_dir_changed(self, _path: str) -> None:
+        """A second launch (pinned-icon click while Slumbr is in the tray) drops
+        a show-request marker here — surface Settings when it appears. Re-arm the
+        watch afterwards: QFileSystemWatcher can drop a path after some change
+        events, and we need every future reopen click to keep working."""
+        if session_logs.consume_show_request():
+            self._open_settings_on_launch()
+        d = str(session_logs.session_dir())
+        if d not in self._reopen_watcher.directories():
+            self._reopen_watcher.addPath(d)
 
     def _open_settings_on_launch(self) -> None:
         """Open Settings on launch so Slumbr shows a window (not just a tray

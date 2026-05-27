@@ -61,11 +61,16 @@ def main() -> int:
     # Single-instance: if Slumbr is already running, surface it and exit instead
     # of starting a second copy (which would double the Caps Lock hook + leave a
     # stray taskbar button + make every relaunch look like a "crash").
-    from .session_logs import another_instance_running, focus_existing
+    from .session_logs import another_instance_running, focus_existing, request_show
 
     if another_instance_running():
-        log.info("Slumbr is already running — focusing it instead of starting a second copy")
+        log.info("Slumbr is already running — surfacing it instead of starting a second copy")
+        # Two paths cover every state: focus_existing() re-activates a window
+        # that's already visible; request_show() drops a marker the running
+        # instance watches for, which surfaces Settings even when Slumbr is
+        # sitting in the tray with no window open (the pinned-icon-click case).
         focus_existing()
+        request_show()
         return 0
 
     log.info("Slumbr %s — tap Caps Lock to dictate", __version__)

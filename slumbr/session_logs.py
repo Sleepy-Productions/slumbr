@@ -18,7 +18,7 @@ not import ``history`` at module load (avoids a cycle); the few places that
 need ``HistoryEntry`` import it lazily.
 
 Layout under %APPDATA%/Slumbr (``~/.slumbr`` off-Windows):
-    session/lock.json            running marker {pid, started_at}
+    session/lock.json            running marker {pid, started_at, create_time}
     session/batch-0001.jsonl     completed batch, one JSON record per line
     crash-logs/crash-<stamp>.txt durable, human-readable breadcrumb
 """
@@ -53,6 +53,44 @@ def _crash_dir() -> Path:
 
 def _lock_path() -> Path:
     return _session_dir() / "lock.json"
+
+
+def session_dir() -> Path:
+    """Public path to this session's working dir — the running instance watches
+    it for the reopen ``show.request`` marker (see ``request_show``)."""
+    return _session_dir()
+
+
+def _show_request_path() -> Path:
+    return _session_dir() / "show.request"
+
+
+def request_show() -> None:
+    """Ask an already-running Slumbr to surface its Settings window. A second
+    launch — e.g. clicking the pinned taskbar icon while Slumbr sits in the tray
+    with no window open — drops this marker and exits; the running instance's
+    directory watcher picks it up and opens Settings. This is what makes "reopen
+    from the taskbar" work even when there's no window for the OS to re-activate.
+    """
+    try:
+        p = _show_request_path()
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(str(time.time()), encoding="utf-8")
+    except OSError as e:
+        log.warning("could not write show request: %s", e)
+
+
+def consume_show_request() -> bool:
+    """True (and clears the marker) if a second launch asked us to surface the
+    window. Best-effort: a failed unlink still reports True so the click isn't
+    silently dropped."""
+    if not _show_request_path().is_file():
+        return False
+    try:
+        _show_request_path().unlink()
+    except OSError:
+        pass
+    return True
 
 
 @dataclass(frozen=True)
@@ -160,40 +198,111 @@ def load_batch(index: int) -> list:
 
 
 def _pid_alive(pid: int) -> bool:
-    """Is a process with this PID currently running? (Windows; best-effort.)"""
+    """Is a process with this PID currently *running*? (Windows; best-effort.)
+
+    OpenProcess succeeding is NOT enough. A force-killed / End-Task'd PID stays
+    queryable for as long as any handle to it lingers (Task Manager, a parent
+    shell) — the process is terminated but its kernel object hasn't been reaped.
+    Such a zombie answers OpenProcess AND GetProcessTimes with its original
+    values, so a liveness check that trusts OpenProcess reads it as "alive" and
+    the next launch from the pinned shortcut misfires as a phantom "already
+    running" (the create-time guard can't catch this — same process, same
+    create time). GetExitCodeProcess returns STILL_ACTIVE (259) ONLY while the
+    process is genuinely running, so it tells live apart from terminated."""
     if sys.platform != "win32":
         return False
     try:
         import ctypes
+        from ctypes import wintypes
 
         PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
-        h = ctypes.windll.kernel32.OpenProcess(
-            PROCESS_QUERY_LIMITED_INFORMATION, False, int(pid)
-        )
-        if h:
-            ctypes.windll.kernel32.CloseHandle(h)
-            return True
+        STILL_ACTIVE = 259
+        k = ctypes.windll.kernel32
+        h = k.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, int(pid))
+        if not h:
+            return False
+        try:
+            code = wintypes.DWORD()
+            if not k.GetExitCodeProcess(h, ctypes.byref(code)):
+                return True  # can't read state but the handle opened — assume live
+            return code.value == STILL_ACTIVE
+        finally:
+            k.CloseHandle(h)
     except Exception:  # noqa: BLE001
-        pass
-    return False
+        return False
 
 
-def _lock_owner_pid() -> int | None:
+def _pid_create_time(pid: int) -> int | None:
+    """A process's creation time as a Windows FILETIME (100ns ticks), or None.
+
+    This is what makes the single-instance lock PID-reuse-proof. After an End
+    Task / kill, the dead instance's PID is freed and Windows can hand it to an
+    unrelated process. A liveness-only check (``_pid_alive``) would then see the
+    recycled PID as "alive" and wrongly conclude Slumbr is still running, so the
+    next launch from the pinned shortcut silently no-ops. The recycled process
+    has a *different* creation time, so matching it against the time we recorded
+    at lock-write distinguishes "still us" from "PID reused"."""
+    if sys.platform != "win32":
+        return None
     try:
-        data = json.loads(_lock_path().read_text(encoding="utf-8"))
-        return int(data["pid"])
-    except (OSError, KeyError, ValueError, TypeError, json.JSONDecodeError):
+        import ctypes
+        from ctypes import wintypes
+
+        PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+        k = ctypes.windll.kernel32
+        h = k.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, int(pid))
+        if not h:
+            return None
+        try:
+            creation, exit_t, kernel_t, user_t = (wintypes.FILETIME() for _ in range(4))
+            ok = k.GetProcessTimes(
+                h, ctypes.byref(creation), ctypes.byref(exit_t),
+                ctypes.byref(kernel_t), ctypes.byref(user_t),
+            )
+            if not ok:
+                return None
+            return (creation.dwHighDateTime << 32) | creation.dwLowDateTime
+        finally:
+            k.CloseHandle(h)
+    except Exception:  # noqa: BLE001
         return None
 
 
+def _lock_owner() -> tuple[int | None, int | None]:
+    """``(pid, create_time)`` recorded in the lock — ``create_time`` is ``None``
+    for a legacy lock written before PID-reuse hardening."""
+    try:
+        data = json.loads(_lock_path().read_text(encoding="utf-8"))
+        ct = data.get("create_time")
+        return int(data["pid"]), (int(ct) if ct is not None else None)
+    except (OSError, KeyError, ValueError, TypeError, json.JSONDecodeError):
+        return None, None
+
+
+def _owner_still_running() -> bool:
+    """True iff the lock's owner is alive AND is the same process that wrote it
+    (PID *and* creation time match). A recycled PID is alive but has a different
+    creation time → treated as gone, so a stale lock never blocks relaunch."""
+    pid, ct = _lock_owner()
+    if pid is None or not _pid_alive(pid):
+        return False
+    if ct is None:
+        return True  # legacy lock without a creation time → liveness only
+    live = _pid_create_time(pid)
+    return live is not None and live == ct
+
+
 def another_instance_running() -> bool:
-    """True if the session lock is held by a DIFFERENT process that is still
-    alive — i.e. another Slumbr is already running. Distinct from a crash (where
-    the lock's owner is gone). Used for the single-instance guard."""
+    """True if the session lock is held by a DIFFERENT, still-running Slumbr —
+    i.e. another instance is genuinely alive. Distinct from a crash (owner gone)
+    and from a recycled PID (owner gone, its PID since reused). Single-instance
+    guard."""
     if not _lock_path().is_file():
         return False
-    pid = _lock_owner_pid()
-    return pid is not None and pid != os.getpid() and _pid_alive(pid)
+    pid, _ = _lock_owner()
+    if pid is None or pid == os.getpid():
+        return False
+    return _owner_still_running()
 
 
 def focus_existing() -> None:
@@ -220,11 +329,12 @@ def previous_session_crashed() -> bool:
     """True only if a session lock was left by a process that is NO LONGER
     running — a genuine unclean exit. A lock held by a live instance is a
     concurrent launch (handled by the single-instance guard), NOT a crash, so
-    it must not trigger the recovery prompt."""
+    it must not trigger the recovery prompt. A recycled PID counts as "owner
+    gone" (the original process is no longer running), so an End-Task'd session
+    is correctly recoverable rather than misread as a still-live instance."""
     if not _lock_path().is_file():
         return False
-    pid = _lock_owner_pid()
-    return pid is None or not _pid_alive(pid)
+    return not _owner_still_running()
 
 
 def begin() -> None:
@@ -234,7 +344,14 @@ def begin() -> None:
     sdir.mkdir(parents=True, exist_ok=True)
     try:
         _lock_path().write_text(
-            json.dumps({"pid": os.getpid(), "started_at": time.time()}),
+            json.dumps({
+                "pid": os.getpid(),
+                "started_at": time.time(),
+                # Creation time of THIS process — the anchor that lets the next
+                # launch tell a live instance from a recycled PID (see
+                # _owner_still_running). Best-effort; None on non-Windows.
+                "create_time": _pid_create_time(os.getpid()),
+            }),
             encoding="utf-8",
         )
     except OSError as e:
@@ -254,6 +371,7 @@ def reset() -> None:
             pass
     try:
         _lock_path().unlink(missing_ok=True)
+        _show_request_path().unlink(missing_ok=True)
     except OSError:
         pass
 

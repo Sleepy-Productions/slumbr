@@ -18,7 +18,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from PySide6.QtCore import QSize, Qt
-from PySide6.QtGui import QFont, QIcon
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QDialog,
     QHBoxLayout,
@@ -45,6 +45,7 @@ from ..theme import (
     text_on,
 )
 from .anim import fade_window_in
+from .tabs._widgets import section_nav_header
 from .tabs.about import AboutTab
 from .tabs.advanced import AdvancedTab
 from .tabs.behavior import BehaviorTab
@@ -296,7 +297,8 @@ class SettingsDialog(QDialog):
         """Populate the sidebar: non-selectable section headers + one row per
         page. Page rows store their QStackedWidget index in ``Qt.UserRole``;
         headers store -1 and are skipped by selection (Qt won't land on a
-        ``NoItemFlags`` row), so the nav reads as grouped without extra widgets.
+        ``NoItemFlags`` row). Headers carry a small divider+caps widget
+        (section_nav_header) so they read as labels, never as clickable rows.
         """
         spec = [
             ("header", "SETUP", None),
@@ -313,21 +315,26 @@ class SettingsDialog(QDialog):
         ]
         for kind, label, widget in spec:
             if kind == "header":
-                item = QListWidgetItem(label.upper())
+                # Section labels are NOT list rows — they're a small widget
+                # (divider + dim caps) dropped into a non-selectable item, so
+                # they can never read as a clickable option. See
+                # _widgets.section_nav_header.
+                first = self._nav.count() == 0
+                item = QListWidgetItem()
                 item.setFlags(Qt.NoItemFlags)
-                hf = QFont(FONT_BODY)
-                hf.setPointSize(8)
-                hf.setBold(True)
-                item.setFont(hf)
-                item.setSizeHint(QSize(0, 34))
+                # Heights clear the QListWidget::item 10px vertical padding so
+                # the label is never clipped (the cause of blank headers).
+                item.setSizeHint(QSize(0, 40 if first else 64))
                 item.setData(Qt.UserRole, -1)
-            else:
-                idx = self._stack.addWidget(widget)
-                item = QListWidgetItem(label)
-                item.setSizeHint(QSize(0, 42))
-                item.setData(Qt.UserRole, idx)
-                if widget is self._engine_tab:
-                    self._engine_row = self._nav.count()
+                self._nav.addItem(item)
+                self._nav.setItemWidget(item, section_nav_header(label, first=first))
+                continue
+            idx = self._stack.addWidget(widget)
+            item = QListWidgetItem(label)
+            item.setSizeHint(QSize(0, 42))
+            item.setData(Qt.UserRole, idx)
+            if widget is self._engine_tab:
+                self._engine_row = self._nav.count()
             self._nav.addItem(item)
 
     def show(self) -> None:  # noqa: N802
@@ -360,7 +367,7 @@ class SettingsDialog(QDialog):
         self.setStyleSheet(_dialog_qss(primary, hover, deep, pill_bg))
         self._engine_tab.reflect_accent(primary)
         self._shortcuts_tab.reflect_accent(primary, deep)
-        self._advanced_tab.reflect_accent(primary)
+        self._voice_tab.reflect_accent(primary)  # cable status dot lives here now
         self._customization_tab.reflect_accent(primary)
         self._about_tab.reflect_accent(primary)
 

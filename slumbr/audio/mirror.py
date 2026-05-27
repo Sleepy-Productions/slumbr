@@ -36,12 +36,40 @@ Latency:
 from __future__ import annotations
 
 import logging
+import re
 import threading
 
 import numpy as np
 import sounddevice as sd
 
 log = logging.getLogger(__name__)
+
+# Matches a channel-count token like "16ch" / "8 ch". VB-Audio exposes each
+# cable twice: a plain stereo endpoint ("CABLE Input …") and a multichannel
+# sibling ("CABLE In 16ch …" — note the driver truncates "Input"→"In", so the
+# names don't share a base). We treat ANY "<N>ch" entry as the sibling.
+_CHANNEL_SUFFIX_RE = re.compile(r"\b\d+\s*ch\b", re.IGNORECASE)
+
+
+def _select_cables(
+    candidates: list[tuple[int, str, int, int]],
+) -> list[tuple[int, str]]:
+    """From priority-sorted ``(idx, name, kw_prio, host_prio)`` candidates pick
+    the cables to surface: prefer the plain stereo endpoints and HIDE the
+    multichannel ``<N>ch`` siblings — they're the same cable, add channels
+    Slumbr's mono passthrough never uses, and just clutter the picker. Fall back
+    to the ``<N>ch`` entries only if NO plain endpoint exists (so routing still
+    works on installs that expose only the multichannel one). Dedupe by name."""
+    plain = [(i, n) for (i, n, _k, _h) in candidates if not _CHANNEL_SUFFIX_RE.search(n)]
+    pool = plain if plain else [(i, n) for (i, n, _k, _h) in candidates]
+    out: list[tuple[int, str]] = []
+    seen: set[str] = set()
+    for idx, name in pool:
+        if name in seen:
+            continue
+        seen.add(name)
+        out.append((idx, name))
+    return out
 
 
 # Substrings that flag a sounddevice output as a virtual cable. Ordered
@@ -113,7 +141,6 @@ def find_virtual_cables() -> list[tuple[int, str]]:
     excluded entirely because they truncate names at 31 chars and
     would look like distinct devices.
     """
-    seen_names: set[str] = set()
     candidates: list[tuple[int, str, int, int]] = []  # idx, name, kw_prio, host_prio
     try:
         for i, d in enumerate(sd.query_devices()):
@@ -145,14 +172,9 @@ def find_virtual_cables() -> list[tuple[int, str]]:
     # 16ch variant), then host-API priority (WASAPI wins over DSound).
     candidates.sort(key=lambda t: (t[2], t[3]))
 
-    # Dedupe by name — keep the first (= highest-priority) occurrence.
-    out: list[tuple[int, str]] = []
-    for idx, name, _, _ in candidates:
-        if name in seen_names:
-            continue
-        seen_names.add(name)
-        out.append((idx, name))
-    return out
+    # Prefer the plain stereo endpoints, hide the "<N>ch" multichannel siblings
+    # (see _select_cables) so the picker shows one obvious entry per cable.
+    return _select_cables(candidates)
 
 
 def resolve_device_index(name: str, *, want_input: bool = False) -> int | None:
