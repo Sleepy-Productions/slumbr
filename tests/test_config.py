@@ -42,8 +42,8 @@ def test_hotkey_combo_trigger_is_last_element():
 def test_word_replacements_coerced_and_cleaned():
     c = SlumbrConfig.from_dict({"word_replacements": {"a": "b", "": "x", "c": 5}})
     assert c.word_replacements["a"] == "b"
-    assert "" not in c.word_replacements      # blank key dropped
-    assert c.word_replacements["c"] == "5"    # non-str value coerced
+    assert "" not in c.word_replacements  # blank key dropped
+    assert c.word_replacements["c"] == "5"  # non-str value coerced
 
 
 def test_corrupt_word_replacements_falls_back_to_empty():
@@ -52,9 +52,7 @@ def test_corrupt_word_replacements_falls_back_to_empty():
 
 
 def test_round_trip_preserves_scalar_fields():
-    c = SlumbrConfig(
-        paste_method="type", auto_send=True, keep_transcript_on_clipboard=True
-    )
+    c = SlumbrConfig(paste_method="type", auto_send=True, keep_transcript_on_clipboard=True)
     c2 = SlumbrConfig.from_dict(c.to_dict())
     assert c2.paste_method == "type"
     assert c2.auto_send is True

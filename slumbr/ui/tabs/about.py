@@ -86,9 +86,7 @@ class AboutTab(QWidget):
         self._repo_btn = QPushButton("View on GitHub  ↗")
         self._repo_btn.setMinimumHeight(38)
         self._repo_btn.setCursor(Qt.PointingHandCursor)
-        self._repo_btn.clicked.connect(
-            lambda: QDesktopServices.openUrl(QUrl(_REPO_URL))
-        )
+        self._repo_btn.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(_REPO_URL)))
         repo_row = QHBoxLayout()
         repo_row.setContentsMargins(0, 8, 0, 0)
         repo_row.addWidget(self._repo_btn)
@@ -118,13 +116,9 @@ class AboutTab(QWidget):
         btn_row.addStretch(1)
         layout.addLayout(btn_row)
 
-        restart_hint = QLabel(
-            "Restart applies pending Engine / model changes and reloads the app."
-        )
+        restart_hint = QLabel("Restart applies pending Engine / model changes and reloads the app.")
         restart_hint.setWordWrap(True)
-        restart_hint.setStyleSheet(
-            f"color: {TEXT_SECONDARY}; font-size: 9pt; padding-top: 4px;"
-        )
+        restart_hint.setStyleSheet(f"color: {TEXT_SECONDARY}; font-size: 9pt; padding-top: 4px;")
         layout.addWidget(restart_hint)
 
         layout.addStretch(1)

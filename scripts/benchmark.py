@@ -114,6 +114,7 @@ def _save_wav(path: Path, samples: np.ndarray) -> None:
 
 # ------------------------------------------------------------------- configs
 
+
 # (label, BackendConfig). cuda_* need an NVIDIA GPU; cpu_*/moonshine run
 # anywhere. Edit freely — this is the matrix the harness compares.
 def _default_configs() -> list[tuple[str, BackendConfig]]:
@@ -203,8 +204,10 @@ def cmd_run(args: argparse.Namespace) -> int:
         wanted = {s.strip() for s in args.only.split(",")}
         configs = [(lbl, cfg) for lbl, cfg in configs if lbl in wanted]
         if not configs:
-            print(f"--only {args.only!r} matched no configs. Available: "
-                  f"{[lbl for lbl, _ in _default_configs()]}")
+            print(
+                f"--only {args.only!r} matched no configs. Available: "
+                f"{[lbl for lbl, _ in _default_configs()]}"
+            )
             return 1
 
     results: list[dict] = []
@@ -237,14 +240,16 @@ def cmd_run(args: argparse.Namespace) -> int:
             except Exception:  # noqa: BLE001, S110
                 pass
         if wers:
-            results.append({
-                "label": label,
-                "backend": cfg.name,
-                "model": cfg.model,
-                "clips": len(wers),
-                "avg_wer_pct": round(float(np.mean(wers)) * 100, 2),
-                "avg_rtf": round(float(np.mean(rtfs)), 3),
-            })
+            results.append(
+                {
+                    "label": label,
+                    "backend": cfg.name,
+                    "model": cfg.model,
+                    "clips": len(wers),
+                    "avg_wer_pct": round(float(np.mean(wers)) * 100, 2),
+                    "avg_rtf": round(float(np.mean(rtfs)), 3),
+                }
+            )
         print()
 
     # Summary table, sorted by accuracy (lowest WER first).
@@ -255,8 +260,9 @@ def cmd_run(args: argparse.Namespace) -> int:
     for r in results:
         print(f"{r['label']:18} {r['clips']:>5} {r['avg_wer_pct']:>8.1f}% {r['avg_rtf']:>9.3f}")
     print("=" * 58)
-    print("WER = lower is better (accuracy). RTF = lower is faster "
-          "(<1 means faster than real time).")
+    print(
+        "WER = lower is better (accuracy). RTF = lower is faster (<1 means faster than real time)."
+    )
 
     out = data_dir / "results.json"
     out.write_text(json.dumps(results, indent=2), encoding="utf-8")
@@ -280,11 +286,16 @@ def cmd_sweep(args: argparse.Namespace) -> int:
         print(f"No clips in {data_dir}. Run 'record' first (or drop in wav+txt pairs).")
         return 1
     beams = [int(b) for b in args.beams.split(",")]
-    print(f"Sweeping beam_size {beams} on {args.model} ({args.device}/{args.compute}) "
-          f"over {len(clips)} clips\n")
+    print(
+        f"Sweeping beam_size {beams} on {args.model} ({args.device}/{args.compute}) "
+        f"over {len(clips)} clips\n"
+    )
     eng = WhisperEngine(
-        model_size=args.model, device=args.device, compute_type=args.compute,
-        language="en", initial_prompt="",
+        model_size=args.model,
+        device=args.device,
+        compute_type=args.compute,
+        language="en",
+        initial_prompt="",
     )
     eng.warm_up()
 

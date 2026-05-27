@@ -106,9 +106,7 @@ class WhisperCppTranscriber:
                 print_special=False,
             )
         except Exception as e:  # noqa: BLE001
-            raise TranscriptionError(
-                f"could not load whisper.cpp model {model_id!r}: {e}"
-            ) from e
+            raise TranscriptionError(f"could not load whisper.cpp model {model_id!r}: {e}") from e
 
         self._language = language or "en"
         self._initial_prompt = initial_prompt
@@ -139,9 +137,7 @@ class WhisperCppTranscriber:
             raise TranscriptionError(f"whisper.cpp transcribe failed: {e}") from e
         dur = time.monotonic() - t0
         audio_s = len(audio) / 16000
-        log.info(
-            "whisper.cpp transcribed %.1fs of audio in %.2fs", audio_s, dur
-        )
+        log.info("whisper.cpp transcribed %.1fs of audio in %.2fs", audio_s, dur)
         return text
 
     def set_runtime_config(

@@ -100,22 +100,16 @@ def paste_text(
         paste_method = "ctrl_v"
 
     fg_before = current_foreground()
-    log.debug(
-        "fg_before hwnd=%s class=%r title=%r", fg_before[0], fg_before[1], fg_before[2]
-    )
+    log.debug("fg_before hwnd=%s class=%r title=%r", fg_before[0], fg_before[1], fg_before[2])
 
     if target_hwnd and not skip_focus_restore:
         ok = restore_foreground(target_hwnd)
         log.debug("restore_foreground(%s) -> %s", target_hwnd, ok)
         time.sleep(_FOCUS_RESTORE_DELAY_S)
         fg_after = current_foreground()
-        log.debug(
-            "fg_after  hwnd=%s class=%r title=%r", fg_after[0], fg_after[1], fg_after[2]
-        )
+        log.debug("fg_after  hwnd=%s class=%r title=%r", fg_after[0], fg_after[1], fg_after[2])
         if fg_after[0] != target_hwnd:
-            log.warning(
-                "foreground did not become target (%s); paste may miss", target_hwnd
-            )
+            log.warning("foreground did not become target (%s); paste may miss", target_hwnd)
 
     log.debug("method=%s", paste_method)
     if paste_method == "type":

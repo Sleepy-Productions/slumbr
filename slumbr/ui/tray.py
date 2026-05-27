@@ -155,12 +155,8 @@ class SlumbrTray:
                 lambda _icon, _item: self._on_settings(),
             ),
             pystray.Menu.SEPARATOR,
-            pystray.MenuItem(
-                "Restart Slumbr", lambda _icon, _item: self._on_restart()
-            ),
-            pystray.MenuItem(
-                "Quit Slumbr", lambda _icon, _item: self._on_quit()
-            ),
+            pystray.MenuItem("Restart Slumbr", lambda _icon, _item: self._on_restart()),
+            pystray.MenuItem("Quit Slumbr", lambda _icon, _item: self._on_quit()),
         )
 
     def start(self) -> None:

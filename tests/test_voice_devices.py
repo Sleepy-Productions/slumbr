@@ -11,8 +11,8 @@ from slumbr.ui.tabs.voice import _select_mic_devices
 def test_collapses_mme_truncation_duplicate():
     # MME truncates at 31 chars -> "…2 S" (no ")"); DirectSound has the full name.
     raw = [
-        (2, "Microphone (HyperX QuadCast 2 S)", 0),   # DirectSound, full
-        (7, "Microphone (HyperX QuadCast 2 S", 1),    # MME, truncated prefix
+        (2, "Microphone (HyperX QuadCast 2 S)", 0),  # DirectSound, full
+        (7, "Microphone (HyperX QuadCast 2 S", 1),  # MME, truncated prefix
     ]
     assert _select_mic_devices(raw) == [(2, "Microphone (HyperX QuadCast 2 S)")]
 

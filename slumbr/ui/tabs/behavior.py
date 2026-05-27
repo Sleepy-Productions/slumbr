@@ -44,15 +44,11 @@ class BehaviorTab(QWidget):
         _card, sl = section_card("Pasting")
         sl.addWidget(field_label("Paste method"))
         self._paste_combo = NoScrollComboBox()
-        self._paste_combo.addItem(
-            "Ctrl+V — default, works almost everywhere", userData="ctrl_v"
-        )
+        self._paste_combo.addItem("Ctrl+V — default, works almost everywhere", userData="ctrl_v")
         self._paste_combo.addItem(
             "Ctrl+Shift+V — fallback if an app ignores Ctrl+V", userData="ctrl_shift_v"
         )
-        self._paste_combo.addItem(
-            "Type each character — universal, slower", userData="type"
-        )
+        self._paste_combo.addItem("Type each character — universal, slower", userData="type")
         i = self._paste_combo.findData(config.paste_method)
         if i >= 0:
             self._paste_combo.setCurrentIndex(i)

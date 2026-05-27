@@ -28,7 +28,11 @@ ROOT = Path(__file__).resolve().parents[1]
 _EDITS = [
     (ROOT / "pyproject.toml", r'(?m)^version = "([^"]+)"', 'version = "{v}"'),
     (ROOT / "slumbr" / "__init__.py", r'(?m)^__version__ = "([^"]+)"', '__version__ = "{v}"'),
-    (ROOT / "packaging" / "slumbr.iss", r'(?m)^#define AppVersion "([^"]+)"', '#define AppVersion "{v}"'),
+    (
+        ROOT / "packaging" / "slumbr.iss",
+        r'(?m)^#define AppVersion "([^"]+)"',
+        '#define AppVersion "{v}"',
+    ),
     (ROOT / "README.md", r'version-([0-9][^-\s"]*)-2b2d31', "version-{v}-2b2d31"),
     (ROOT / "README.md", r'alt="version ([^"]+)"', 'alt="version {v}"'),
 ]

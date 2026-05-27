@@ -83,6 +83,7 @@ class AudioRecorder:
         resolved: int | str | None = self.device
         if isinstance(self.device, str):
             from .mirror import resolve_device_index  # noqa: PLC0415
+
             idx = resolve_device_index(self.device, want_input=True)
             if idx is not None:
                 resolved = idx

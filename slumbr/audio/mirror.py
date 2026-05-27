@@ -77,11 +77,11 @@ def _select_cables(
 # "CABLE Input", and that's what we want first if the user has multiple
 # routing tools installed.
 _VIRTUAL_CABLE_KEYWORDS: tuple[str, ...] = (
-    "cable input",   # VB-Audio Virtual Cable — primary
-    "vb-cable",      # alternate label some Windows installs use
-    "vb-audio",      # broader VB family (Voicemeeter etc.)
-    "voicemeeter",   # Voicemeeter's virtual inputs
-    "virtual cable", # generic fallback
+    "cable input",  # VB-Audio Virtual Cable — primary
+    "vb-cable",  # alternate label some Windows installs use
+    "vb-audio",  # broader VB family (Voicemeeter etc.)
+    "voicemeeter",  # Voicemeeter's virtual inputs
+    "virtual cable",  # generic fallback
 )
 
 
@@ -112,7 +112,7 @@ _OUTPUT_HOST_API_PRIORITY: dict[str, int] = {
     "Windows WASAPI": 0,
     "Windows DirectSound": 1,
     "Windows WDM-KS": 99,  # excluded — no blocking-write support (-9999)
-    "MME": 99,             # excluded — truncated names confuse the dropdown
+    "MME": 99,  # excluded — truncated names confuse the dropdown
 }
 _INPUT_HOST_API_PRIORITY: dict[str, int] = {
     "Windows DirectSound": 0,
@@ -197,11 +197,9 @@ def resolve_device_index(name: str, *, want_input: bool = False) -> int | None:
     """
     target = name.strip()
     field = "max_input_channels" if want_input else "max_output_channels"
-    priority_map = (
-        _INPUT_HOST_API_PRIORITY if want_input else _OUTPUT_HOST_API_PRIORITY
-    )
+    priority_map = _INPUT_HOST_API_PRIORITY if want_input else _OUTPUT_HOST_API_PRIORITY
     candidates: list[tuple[int, int]] = []  # (idx, host_prio)
-    fallback: list[tuple[int, int]] = []    # truncation-tolerant fallback
+    fallback: list[tuple[int, int]] = []  # truncation-tolerant fallback
 
     try:
         devices = list(sd.query_devices())
@@ -298,7 +296,8 @@ class MicMirror:
         except Exception as e:  # noqa: BLE001
             log.warning(
                 "could not query device %r for native format (%s); using requested",
-                self._device, e,
+                self._device,
+                e,
             )
             self._dst_samplerate = samplerate
             self._dst_channels = channels
@@ -333,14 +332,20 @@ class MicMirror:
                 self._stream = stream
                 log.info(
                     "MicMirror started device=%d (%r) -> %d Hz %d ch (src %d Hz %d ch, x%d upsample)",
-                    self._device, self._device_name or "?",
-                    self._dst_samplerate, self._dst_channels,
-                    self._src_samplerate, 1, self._upsample,
+                    self._device,
+                    self._device_name or "?",
+                    self._dst_samplerate,
+                    self._dst_channels,
+                    self._src_samplerate,
+                    1,
+                    self._upsample,
                 )
             except Exception as e:  # noqa: BLE001
                 log.warning(
                     "MicMirror open failed for device=%d (%r): %s",
-                    self._device, self._device_name or "?", e,
+                    self._device,
+                    self._device_name or "?",
+                    e,
                 )
                 self._stream = None
                 raise
@@ -401,9 +406,7 @@ class MicMirror:
                 src = np.repeat(src, self._upsample)
             # 4) Duplicate to stereo if the device wants more channels.
             if self._dst_channels >= 2:
-                payload = np.column_stack([src] * self._dst_channels).astype(
-                    np.float32, copy=False
-                )
+                payload = np.column_stack([src] * self._dst_channels).astype(np.float32, copy=False)
             else:
                 payload = src
             try:

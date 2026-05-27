@@ -48,15 +48,15 @@ class WhisperEngine:
     ) -> None:
         log.info("loading %r on %s (%s)...", model_size, device, compute_type)
         t0 = time.monotonic()
-        self.model = WhisperModel(_resolve_model(model_size), device=device, compute_type=compute_type)
+        self.model = WhisperModel(
+            _resolve_model(model_size), device=device, compute_type=compute_type
+        )
         self.language = language
         self.initial_prompt = initial_prompt or None
         self.model_size = model_size
         log.info("model loaded in %.1fs", time.monotonic() - t0)
 
-    def set_runtime_config(
-        self, *, language: str | None, initial_prompt: str
-    ) -> None:
+    def set_runtime_config(self, *, language: str | None, initial_prompt: str) -> None:
         """Update decode-time knobs without reloading the model.
 
         Both fields are forwarded to every subsequent `transcribe()` call.

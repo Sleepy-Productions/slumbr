@@ -71,6 +71,7 @@ class HardwareProfile:
         """
         if not self.gpus:
             return None
+
         # Rank: discrete NVIDIA > discrete AMD > Intel Arc discrete > iGPU > other
         def rank(g: GpuInfo) -> int:
             if g.vendor == GpuVendor.NVIDIA and g.is_discrete:
@@ -82,13 +83,16 @@ class HardwareProfile:
             if g.is_discrete:
                 return 3
             return 4  # iGPU
+
         return sorted(self.gpus, key=rank)[0]
 
 
 # ----------------------------------------------------------- vendor detect
 
 
-_NVIDIA_RE = re.compile(r"\bnvidia\b|\bgeforce\b|\brtx\b|\bgtx\b|\bquadro\b|\btesla\b", re.IGNORECASE)
+_NVIDIA_RE = re.compile(
+    r"\bnvidia\b|\bgeforce\b|\brtx\b|\bgtx\b|\bquadro\b|\btesla\b", re.IGNORECASE
+)
 _AMD_RE = re.compile(r"\bamd\b|\bradeon\b|\bvega\b|\brdna\b|\bryzen\s+graphics\b", re.IGNORECASE)
 _INTEL_RE = re.compile(r"\bintel\b|\barc\b|\biris\b|\buhd\b", re.IGNORECASE)
 
@@ -197,7 +201,9 @@ def _probe_via_wmi(timeout_s: float = 3.0) -> HardwareProfile | None:
             if nvsmi_vram > 0:
                 log.debug(
                     "WMI reported %.1f GB for %s; nvidia-smi reports %.1f GB",
-                    vram / (1024**3), name, nvsmi_vram / (1024**3),
+                    vram / (1024**3),
+                    name,
+                    nvsmi_vram / (1024**3),
                 )
                 vram = nvsmi_vram
         profile.gpus.append(
