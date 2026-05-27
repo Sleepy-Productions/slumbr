@@ -34,8 +34,8 @@ Grab the build for your hardware from the [**Releases**](https://github.com/SIee
 
 | Download | For | Notes |
 | --- | --- | --- |
-| **`slumbr-setup-cpu.exe`** | Any PC | Runs on every machine (NVIDIA / AMD / Intel / no GPU). CPU-speed transcription. Smallest download. |
-| **`slumbr-setup-nvidia.exe`** | NVIDIA GPU | GPU-accelerated (CUDA). Larger — bundles the CUDA runtime. |
+| **`slumbr-setup-cpu.exe`** | Any PC | Runs on every machine (NVIDIA / AMD / Intel / no GPU). CPU-speed transcription. Bundles its models — works offline the moment it's installed. Smallest download. |
+| **`slumbr-setup-nvidia.exe`** | NVIDIA GPU | GPU-accelerated (CUDA). Bundles the CUDA runtime + live-preview models; downloads the GPU transcription model (~1.5 GB) once on first launch. |
 
 Not sure which? **Start with the CPU build** — it works everywhere, and you can switch to the GPU build any time. If a build doesn't match your GPU, Slumbr just runs on its built-in CPU engine and tells you which build to grab — it never leaves you stuck.
 
@@ -171,7 +171,7 @@ On the **Voice** tab → **Virtual mic cable** section, make sure **"Route my mi
 ## Limitations
 
 - **Windows-only.** WASAPI, the Win32 hotkey hook, and Windows clipboard APIs aren't abstracted.
-- **First-run model downloads** total ~200 MB – 3 GB depending on backend; not feasible fully offline on first launch.
+- **The CPU build runs fully offline from first launch** (its models ship in the installer). The NVIDIA build downloads its GPU transcription model (~1.5 GB) once on first launch, then runs offline. The from-source install downloads models on first run.
 - **Reverse PTT needs VB-Cable** for the universal path. The Discord-PTM keybind works without it but only in Discord.
 - **Moonshine is English-only.** Non-English users are routed to a Whisper backend automatically.
 - **Paste targets the window focused when you started dictating** — if you switch windows mid-transcription, the text lands in the original.
