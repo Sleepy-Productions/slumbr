@@ -241,6 +241,13 @@ class SlumbrConfig:
             # empty-map default is used instead of a bad type.
             del kwargs["word_replacements"]
 
+        # ----- accent_color must be a non-empty string. A hand-edited number or
+        # null would slip through here and later crash derive_accent() on
+        # ``.lstrip()`` when the UI builds — drop it so the default is used.
+        acc = kwargs.get("accent_color")
+        if not isinstance(acc, str) or not acc.strip():
+            kwargs.pop("accent_color", None)
+
         return cls(**kwargs)
 
     def to_dict(self) -> dict[str, Any]:
