@@ -9,6 +9,24 @@ repetition collapse.
 from slumbr.polish import polish
 
 
+# ----- regression: a user word-replacement value must be applied LITERALLY.
+# A correction containing a backslash/group-ref used to crash re.sub (e.g. \1 =
+# "invalid group reference", trailing "\" = "bad escape") or silently corrupt
+# output (\n -> newline). It runs on every transcript, so a crash = lost paste.
+
+def test_replacement_with_regex_backref_is_literal():
+    assert polish("say foo now", replacements={"foo": r"\1"}) == r"Say \1 now."
+
+
+def test_replacement_with_trailing_backslash_does_not_crash():
+    out = polish("say foo now", replacements={"foo": "bar\\"})
+    assert isinstance(out, str) and "bar\\" in out
+
+
+def test_replacement_with_windows_path_not_corrupted():
+    assert polish("open foo", replacements={"foo": r"C:\new\tmp"}) == r"Open C:\new\tmp."
+
+
 def test_capitalizes_and_adds_terminal_period():
     assert polish("hello world") == "Hello world."
 

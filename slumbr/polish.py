@@ -129,7 +129,10 @@ def _apply_replacements(text: str, replacements: dict[str, str]) -> str:
         # Whole-word, case-insensitive. \b doesn't play nice with multi-word
         # keys, so guard with lookaround on word chars instead.
         pattern = re.compile(rf"(?<!\w){re.escape(heard)}(?!\w)", re.IGNORECASE)
-        text = pattern.sub(corrected, text)
+        # Replace via a function so ``corrected`` is taken LITERALLY — a string
+        # replacement would interpret backslash escapes / group refs (a user
+        # typing "C:\1" or a trailing "\" would crash re.sub or corrupt output).
+        text = pattern.sub(lambda _m: corrected, text)
     return text
 
 
