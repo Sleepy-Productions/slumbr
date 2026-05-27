@@ -64,14 +64,16 @@ for _pkg in (
 hiddenimports += collect_submodules("slumbr")
 datas += [("../slumbr/assets", "slumbr/assets")]
 
-# Bundled model weights → fully-offline first run. Staged into
-# packaging/bundled-models/ (gitignored). Each lands at <bundle>/models/<name>/
-# where slumbr/_bundled.py resolves it before any Hugging Face download. The
-# NVIDIA build ships the CT2 Whisper large-v3-turbo (the recommended primary on
-# any NVIDIA card) PLUS the Moonshine/VAD/punct trio that always drives the
-# popup partials and the CPU fallback engine.
+# Bundled model weights → instant-offline popup partials + CPU fallback. Staged
+# into packaging/bundled-models/ (gitignored). Each lands at <bundle>/models/
+# <name>/ where slumbr/_bundled.py resolves it before any Hugging Face download.
+# The NVIDIA build bundles ONLY the Moonshine/VAD/punct trio that always drives
+# the popup partials + the CPU fallback engine — NOT the 1.5 GB CT2 Whisper
+# turbo, which would push the installer past GitHub's 2 GiB release-asset cap.
+# The GPU primary model downloads once on first launch (progress dialog in
+# ui/preparing.py); the CPU build stays fully offline.
 _BUNDLED = os.path.join(SPECPATH, "bundled-models")
-for _sub in ("moonshine-base-en", "silero-vad", "online-punct-en", "whisper-large-v3-turbo"):
+for _sub in ("moonshine-base-en", "silero-vad", "online-punct-en"):
     _msrc = os.path.join(_BUNDLED, _sub)
     if os.path.isdir(_msrc):
         datas += [(_msrc, "models/" + _sub)]
