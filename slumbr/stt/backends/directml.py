@@ -115,9 +115,7 @@ class DirectMLTranscriber:
             raise TranscriptionError(f"DirectML transcribe failed: {e}") from e
         dur = time.monotonic() - t0
         audio_s = len(audio) / 16000
-        log.info(
-            "DirectML transcribed %.1fs of audio in %.2fs", audio_s, dur
-        )
+        log.info("DirectML transcribed %.1fs of audio in %.2fs", audio_s, dur)
         return text
 
     def set_runtime_config(

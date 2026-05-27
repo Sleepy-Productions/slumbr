@@ -44,13 +44,10 @@ class AdvancedTab(QWidget):
         # ===== Pasting extras =====
         _card, sl = section_card("Pasting")
         self._scope = field_hint(
-            f"Auto-send & vocabulary apply to the active mode: "
-            f"{config.active_profile().label}."
+            f"Auto-send & vocabulary apply to the active mode: {config.active_profile().label}."
         )
         sl.addWidget(self._scope)
-        self._auto_send_cb = QCheckBox(
-            "Auto-send — press Enter right after your second hotkey tap"
-        )
+        self._auto_send_cb = QCheckBox("Auto-send — press Enter right after your second hotkey tap")
         self._auto_send_cb.setChecked(config.active_profile().auto_send)
         self._auto_send_cb.toggled.connect(self._on_changed)
         sl.addWidget(self._auto_send_cb)
@@ -68,8 +65,7 @@ class AdvancedTab(QWidget):
         sl.addWidget(self._keep_clip_cb)
         sl.addWidget(
             field_hint(
-                "Heads up: each new dictation overwrites your clipboard with the "
-                "latest transcript."
+                "Heads up: each new dictation overwrites your clipboard with the latest transcript."
             )
         )
         layout.addWidget(_card)
@@ -118,6 +114,4 @@ class AdvancedTab(QWidget):
         self._prompt_edit.blockSignals(True)
         self._prompt_edit.setPlainText(p.initial_prompt)
         self._prompt_edit.blockSignals(False)
-        self._scope.setText(
-            f"Auto-send & vocabulary apply to the active mode: {p.label}."
-        )
+        self._scope.setText(f"Auto-send & vocabulary apply to the active mode: {p.label}.")

@@ -25,20 +25,23 @@ def _write(tmpcfg, content: str) -> None:
     (tmpcfg / "config.json").write_text(content, encoding="utf-8")
 
 
-@pytest.mark.parametrize("content", [
-    "{ not json",
-    "",
-    "   ",
-    "[1,2,3]",
-    "42",
-    "null",
-    '{"accent_color": 12345}',
-    '{"accent_color": null}',
-    '{"hotkey_vks": "nope"}',
-    '{"word_replacements": "x"}',
-    '{"accent_color": "#abcdef", "bogus_future_key": 1}',
-    '{"language": "es"}',
-])
+@pytest.mark.parametrize(
+    "content",
+    [
+        "{ not json",
+        "",
+        "   ",
+        "[1,2,3]",
+        "42",
+        "null",
+        '{"accent_color": 12345}',
+        '{"accent_color": null}',
+        '{"hotkey_vks": "nope"}',
+        '{"word_replacements": "x"}',
+        '{"accent_color": "#abcdef", "bogus_future_key": 1}',
+        '{"language": "es"}',
+    ],
+)
 def test_load_never_crashes_and_yields_usable_accent(tmpcfg, content):
     _write(tmpcfg, content)
     cfg = SlumbrConfig.load()

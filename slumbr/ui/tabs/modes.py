@@ -85,9 +85,7 @@ class ModesTab(QWidget):
         for m in config.modes:
             rb = QRadioButton(m.label)
             rb.setChecked(m.id == config.active_mode)
-            rb.toggled.connect(
-                lambda checked, mid=m.id: checked and self._on_mode_picked(mid)
-            )
+            rb.toggled.connect(lambda checked, mid=m.id: checked and self._on_mode_picked(mid))
             self._group.addButton(rb)
             sl.addWidget(rb)
             sl.addWidget(field_hint(self._describe(m)))

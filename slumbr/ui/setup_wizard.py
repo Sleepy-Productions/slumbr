@@ -284,9 +284,7 @@ class SetupWizard(QDialog):
 
         # A simple animated dot row — pure Qt timer, no fancy spinner widget.
         self._dots = QLabel("●  ○  ○")
-        self._dots.setStyleSheet(
-            f"color: {VIOLET_PRIMARY}; font-size: 22px; padding: 16px 0;"
-        )
+        self._dots.setStyleSheet(f"color: {VIOLET_PRIMARY}; font-size: 22px; padding: 16px 0;")
         layout.addWidget(self._dots)
 
         self._dot_timer = QTimer(self)
@@ -451,9 +449,9 @@ class SetupWizard(QDialog):
         self._back_btn.setVisible(idx in (2, 3))
         labels = {
             0: "Get started",
-            1: "",      # hidden during probe
+            1: "",  # hidden during probe
             2: "Continue",
-            3: "Cancel install",   # becomes "Try another backend" on failure
+            3: "Cancel install",  # becomes "Try another backend" on failure
             4: "Finish",
         }
         self._next_btn.setText(labels.get(idx, "Next"))
@@ -565,7 +563,9 @@ class SetupWizard(QDialog):
         if not extras or _is_backend_installed(backend_name):
             log.info(
                 "wizard: backend %s needs no install (extras=%r, installed=%s) — skipping to Done",
-                backend_name, extras, _is_backend_installed(backend_name),
+                backend_name,
+                extras,
+                _is_backend_installed(backend_name),
             )
             self._commit_recommendation()
             self._stack.setCurrentIndex(4)
@@ -578,7 +578,9 @@ class SetupWizard(QDialog):
 
     def _start_install(self, extras: list[str], backend_name: str) -> None:
         self._install_log.clear()
-        self._install_title.setText(f"Installing {_BACKEND_LABELS.get(backend_name, backend_name)}…")
+        self._install_title.setText(
+            f"Installing {_BACKEND_LABELS.get(backend_name, backend_name)}…"
+        )
         self._install_subtitle.setText(
             f"Running `pip install slumbr[{','.join(extras)}]` in your venv. "
             "First time can take 1–3 minutes."
@@ -609,8 +611,7 @@ class SetupWizard(QDialog):
             self._install_succeeded = True
             self._install_title.setText("Backend installed")
             self._install_subtitle.setText(
-                "Slumbr will relaunch to pick up the new wheels. "
-                "Click Finish to continue."
+                "Slumbr will relaunch to pick up the new wheels. Click Finish to continue."
             )
             # Commit the recommendation now that the wheels exist.
             self._commit_recommendation()

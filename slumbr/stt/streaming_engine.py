@@ -181,9 +181,7 @@ def _ensure_moonshine(variant: str = "base") -> dict[str, str]:
     )
     missing = [f for f in _MOONSHINE_FILES if not (mdir / f).is_file()]
     if missing:
-        raise ModelDownloadError(
-            f"Moonshine {variant} files missing after download: {missing}"
-        )
+        raise ModelDownloadError(f"Moonshine {variant} files missing after download: {missing}")
     return {f: str(mdir / f) for f in _MOONSHINE_FILES}
 
 

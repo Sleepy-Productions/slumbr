@@ -41,9 +41,7 @@ def _install_crash_excepthook() -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(prog="slumbr", description="Slumbr — local voice dictation")
     parser.add_argument("--debug", action="store_true", help="enable DEBUG logging")
-    parser.add_argument(
-        "--version", action="version", version=f"Slumbr {__version__}"
-    )
+    parser.add_argument("--version", action="version", version=f"Slumbr {__version__}")
     args = parser.parse_args()
 
     if args.debug:

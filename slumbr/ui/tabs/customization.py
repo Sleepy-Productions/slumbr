@@ -37,9 +37,7 @@ class CustomizationTab(QWidget):
         layout.setSpacing(20)
 
         layout.addWidget(heading("Customization", size=28))
-        layout.addWidget(
-            subheading("Make Slumbr yours — accent color and recording-popup style.")
-        )
+        layout.addWidget(subheading("Make Slumbr yours — accent color and recording-popup style."))
 
         # ===== Section: Appearance =====
         _card, sl = section_card("Appearance")
@@ -73,9 +71,7 @@ class CustomizationTab(QWidget):
         self._compact_popup_cb.toggled.connect(self._on_compact_popup_toggle)
         sl.addWidget(self._compact_popup_cb)
 
-        self._follow_cursor_cb = QCheckBox(
-            "Popup follows the mouse cursor while recording"
-        )
+        self._follow_cursor_cb = QCheckBox("Popup follows the mouse cursor while recording")
         self._follow_cursor_cb.setChecked(config.popup_follow_cursor)
         self._follow_cursor_cb.toggled.connect(self._on_follow_cursor_toggle)
         sl.addWidget(self._follow_cursor_cb)
@@ -101,9 +97,7 @@ class CustomizationTab(QWidget):
         )
 
     def _on_pick_color(self) -> None:
-        chosen = QColorDialog.getColor(
-            QColor(self._config.accent_color), self, "Pick accent color"
-        )
+        chosen = QColorDialog.getColor(QColor(self._config.accent_color), self, "Pick accent color")
         if chosen.isValid():
             self._config.accent_color = chosen.name()
             self._refresh_swatch()

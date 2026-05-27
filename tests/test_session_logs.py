@@ -123,6 +123,7 @@ def test_live_other_instance_is_not_a_crash(appdata):
 # the zombie-handle bug: OpenProcess still succeeds on a terminated process, so
 # _pid_alive must additionally check the exit code (GetExitCodeProcess != 259).
 
+
 @pytest.mark.skipif(sys.platform != "win32", reason="Windows process-handle semantics")
 def test_pid_alive_true_for_self():
     assert session_logs._pid_alive(os.getpid()) is True
@@ -166,12 +167,25 @@ def test_killed_instance_does_not_block_relaunch(appdata):
 # ----- a corrupt lock.json must never crash the startup guards (it's read on
 # every launch). Valid-JSON-but-not-an-object used to crash _lock_owner on .get.
 
-@pytest.mark.parametrize("content", [
-    "{ not json", "", "   ", "[1,2,3]", "42", "null", '"hello"',
-    '{"started_at": 0}',                       # no pid
-    '{"pid": "abc"}', '{"pid": null}', '{"pid": [1, 2]}', '{"pid": 1.5}',
-    '{"pid": 4242, "create_time": "soon"}',    # garbage create_time
-])
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        "{ not json",
+        "",
+        "   ",
+        "[1,2,3]",
+        "42",
+        "null",
+        '"hello"',
+        '{"started_at": 0}',  # no pid
+        '{"pid": "abc"}',
+        '{"pid": null}',
+        '{"pid": [1, 2]}',
+        '{"pid": 1.5}',
+        '{"pid": 4242, "create_time": "soon"}',  # garbage create_time
+    ],
+)
 def test_corrupt_lock_never_crashes_startup_guards(appdata, content):
     sdir = appdata / "Slumbr" / "session"
     sdir.mkdir(parents=True, exist_ok=True)

@@ -107,9 +107,9 @@ class HistoryTab(QWidget):
     def __init__(self) -> None:
         super().__init__()
         self._stack = QStackedWidget()
-        self._stack.addWidget(self._build_live_page())     # 0
-        self._stack.addWidget(self._build_logs_page())      # 1
-        self._stack.addWidget(self._build_detail_page())    # 2
+        self._stack.addWidget(self._build_live_page())  # 0
+        self._stack.addWidget(self._build_logs_page())  # 1
+        self._stack.addWidget(self._build_detail_page())  # 2
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -241,9 +241,7 @@ class HistoryTab(QWidget):
         # Copy a transcript out: double-click, right-click, or select + Ctrl+C.
         lw.itemDoubleClicked.connect(self._copy_item)
         lw.setContextMenuPolicy(Qt.CustomContextMenu)
-        lw.customContextMenuRequested.connect(
-            lambda pos, _l=lw: self._show_context_menu(_l, pos)
-        )
+        lw.customContextMenuRequested.connect(lambda pos, _l=lw: self._show_context_menu(_l, pos))
         sc = QShortcut(QKeySequence.StandardKey.Copy, lw)
         sc.activated.connect(lambda _l=lw: self._copy_item(_l.currentItem()))
         return lw
@@ -333,9 +331,7 @@ class HistoryTab(QWidget):
             return
         # rows are newest-first in the view; copy oldest-first so it reads as a
         # chronological log.
-        blob = "\n".join(
-            f"[{it.data(_TS_ROLE)}] {it.data(_TEXT_ROLE)}" for it in reversed(rows)
-        )
+        blob = "\n".join(f"[{it.data(_TS_ROLE)}] {it.data(_TEXT_ROLE)}" for it in reversed(rows))
         QApplication.clipboard().setText(blob)
         QToolTip.showText(QCursor.pos(), f"Copied {len(rows)} transcripts ✓", self)
 

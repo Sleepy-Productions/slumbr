@@ -70,14 +70,14 @@ MIN_AUDIO_SECONDS = 0.3
 
 
 class _Bridge(QObject):
-    toggle = Signal(str)            # source tag: "hotkey", "tray"
+    toggle = Signal(str)  # source tag: "hotkey", "tray"
     open_settings = Signal()
     quit_requested = Signal()
     restart_requested = Signal()
-    quick_toggle = Signal(str)      # SlumbrConfig field name (bool field)
-    mode_selected = Signal(str)     # ModeProfile id picked from the tray submenu
-    cycle_mode = Signal()           # cycle-mode hotkey pressed
-    audio_chunk = Signal(object)    # numpy ndarray payload
+    quick_toggle = Signal(str)  # SlumbrConfig field name (bool field)
+    mode_selected = Signal(str)  # ModeProfile id picked from the tray submenu
+    cycle_mode = Signal()  # cycle-mode hotkey pressed
+    audio_chunk = Signal(object)  # numpy ndarray payload
 
 
 class SlumbrApp:
@@ -103,6 +103,7 @@ class SlumbrApp:
         # Black palette so non-stylesheet surfaces (scroll viewports, etc.)
         # don't fall back to the OS-default grey behind the dark UI.
         from .theme import apply_dark_palette
+
         apply_dark_palette(self.qapp)
 
         # ----- Config (with legacy → BackendConfig migration).
@@ -187,9 +188,7 @@ class SlumbrApp:
         # download shows feedback instead of a silent multi-minute freeze,
         # and a download failure surfaces a clear error (see preparing.py).
         self.transcriber: Transcriber
-        self.transcriber, self.streaming_engine = prepare_engines(
-            self.config, self._app_icon
-        )
+        self.transcriber, self.streaming_engine = prepare_engines(self.config, self._app_icon)
 
         # ----- App state + popup + foreground tracker.
         self.state = StateMachine()
@@ -621,6 +620,7 @@ class SlumbrApp:
         if not self.config.mic_routing_enabled:
             return
         from .audio.mirror import find_virtual_cables  # noqa: PLC0415
+
         device = self.config.mic_routing_device_name
 
         # No device saved yet → auto-pick the best detected cable.
@@ -658,8 +658,7 @@ class SlumbrApp:
         )
         self.mic_mirror = None
         self.tray.notify(
-            "Virtual mic routing is on but no usable cable was found — "
-            "check Settings → Behavior.",
+            "Virtual mic routing is on but no usable cable was found — check Settings → Behavior.",
         )
 
     def _open_mic_mirror_device(self, device: str) -> bool:
@@ -757,9 +756,7 @@ class SlumbrApp:
         vks = self.config.cycle_mode_vks
         if vks:
             if self.cycle_hotkey is None:
-                self.cycle_hotkey = Hotkey(
-                    vks=vks, on_press=lambda: self.bridge.cycle_mode.emit()
-                )
+                self.cycle_hotkey = Hotkey(vks=vks, on_press=lambda: self.bridge.cycle_mode.emit())
                 self.cycle_hotkey.start()
             else:
                 self.cycle_hotkey.set_vks(vks)

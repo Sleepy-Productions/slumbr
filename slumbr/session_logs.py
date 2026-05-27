@@ -98,8 +98,8 @@ class BatchMeta:
     """A completed session log on disk — enough to render its row without
     loading every transcript."""
 
-    index: int          # 1-based; matches the "Log N" label
-    count: int          # number of transcripts in the batch
+    index: int  # 1-based; matches the "Log N" label
+    count: int  # number of transcripts in the batch
     first_ts: float
     last_ts: float
     path: Path
@@ -163,11 +163,7 @@ def roll_batch(entries: list) -> int | None:
     """Write ``entries`` (objects with ``.text`` + ``.ts``) as the next numbered
     session log. Returns the new batch index, or ``None`` if nothing was written.
     """
-    rows = [
-        {"text": e.text, "ts": float(e.ts)}
-        for e in entries
-        if getattr(e, "text", "").strip()
-    ]
+    rows = [{"text": e.text, "ts": float(e.ts)} for e in entries if getattr(e, "text", "").strip()]
     if not rows:
         return None
     idx = _next_index()
@@ -256,8 +252,11 @@ def _pid_create_time(pid: int) -> int | None:
         try:
             creation, exit_t, kernel_t, user_t = (wintypes.FILETIME() for _ in range(4))
             ok = k.GetProcessTimes(
-                h, ctypes.byref(creation), ctypes.byref(exit_t),
-                ctypes.byref(kernel_t), ctypes.byref(user_t),
+                h,
+                ctypes.byref(creation),
+                ctypes.byref(exit_t),
+                ctypes.byref(kernel_t),
+                ctypes.byref(user_t),
             )
             if not ok:
                 return None
@@ -349,14 +348,16 @@ def begin() -> None:
     sdir.mkdir(parents=True, exist_ok=True)
     try:
         _lock_path().write_text(
-            json.dumps({
-                "pid": os.getpid(),
-                "started_at": time.time(),
-                # Creation time of THIS process — the anchor that lets the next
-                # launch tell a live instance from a recycled PID (see
-                # _owner_still_running). Best-effort; None on non-Windows.
-                "create_time": _pid_create_time(os.getpid()),
-            }),
+            json.dumps(
+                {
+                    "pid": os.getpid(),
+                    "started_at": time.time(),
+                    # Creation time of THIS process — the anchor that lets the next
+                    # launch tell a live instance from a recycled PID (see
+                    # _owner_still_running). Best-effort; None on non-Windows.
+                    "create_time": _pid_create_time(os.getpid()),
+                }
+            ),
             encoding="utf-8",
         )
     except OSError as e:

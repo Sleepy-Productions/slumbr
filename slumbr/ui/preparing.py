@@ -112,9 +112,7 @@ class _PreparingDialog(QDialog):
         lay.addWidget(bar)
 
 
-def prepare_engines(
-    config: SlumbrConfig, app_icon: QIcon | None = None
-) -> tuple[object, object]:
+def prepare_engines(config: SlumbrConfig, app_icon: QIcon | None = None) -> tuple[object, object]:
     """Build + warm the transcriber and streaming engine, showing a progress
     dialog if it's slow. Returns ``(transcriber, streaming_engine)``.
 

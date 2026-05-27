@@ -70,9 +70,9 @@ class BackendConfig:
 
     name: str
     model: str
-    compute_type: str | None = None    # ct2 only
-    threads: int | None = None         # whispercpp / moonshine CPU thread count
-    device_index: int = 0              # multi-GPU systems
+    compute_type: str | None = None  # ct2 only
+    threads: int | None = None  # whispercpp / moonshine CPU thread count
+    device_index: int = 0  # multi-GPU systems
     extra: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
@@ -107,13 +107,13 @@ class ModeProfile:
 
     id: str = ""
     label: str = ""
-    formatter: str = "prose"          # "prose" | "code"
+    formatter: str = "prose"  # "prose" | "code"
     language: str = "en"
     initial_prompt: str = ""
     word_replacements: dict[str, str] = field(default_factory=dict)
     strip_trailing_filler: bool = True
     auto_send: bool = False
-    paste_method: str = "ctrl_v"      # "ctrl_v" | "ctrl_shift_v" | "type"
+    paste_method: str = "ctrl_v"  # "ctrl_v" | "ctrl_shift_v" | "type"
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> ModeProfile:
@@ -136,9 +136,7 @@ def _default_modes() -> list[ModeProfile]:
     return [
         ModeProfile(id="notes", label="Notes", formatter="prose"),
         ModeProfile(id="llm_chat", label="LLM Chat", formatter="prose", auto_send=True),
-        ModeProfile(
-            id="code", label="Code", formatter="code", strip_trailing_filler=False
-        ),
+        ModeProfile(id="code", label="Code", formatter="code", strip_trailing_filler=False),
     ]
 
 
@@ -174,7 +172,7 @@ class SlumbrConfig:
     # the primary-button background under light text). Users pick a vivid accent
     # (e.g. a violet like #794fb5) in Settings → Customization.
     accent_color: str = "#7E7A92"
-    paste_method: str = "ctrl_v"   # "ctrl_v" | "ctrl_shift_v" | "type"
+    paste_method: str = "ctrl_v"  # "ctrl_v" | "ctrl_shift_v" | "type"
 
     # ----- Hotkey -----
     # ``hotkey_vks`` is the combo: a list of 1–4 Windows VK codes that must
@@ -309,7 +307,8 @@ class SlumbrConfig:
             legacy_ct = str(data.get("compute_type") or "int8_float16")
             log.info(
                 "migrating legacy config to BackendConfig(cuda_ct2, %s, %s)",
-                legacy_model, legacy_ct,
+                legacy_model,
+                legacy_ct,
             )
             kwargs["backend"] = BackendConfig(
                 name="cuda_ct2",
@@ -341,11 +340,7 @@ class SlumbrConfig:
         # user's existing top-level knobs so an upgrade lands as "Notes" exactly.
         raw_modes = data.get("modes")
         if isinstance(raw_modes, list) and raw_modes:
-            parsed = [
-                ModeProfile.from_dict(m)
-                for m in raw_modes
-                if isinstance(m, dict)
-            ]
+            parsed = [ModeProfile.from_dict(m) for m in raw_modes if isinstance(m, dict)]
             parsed = [m for m in parsed if m.id]
             kwargs["modes"] = _ensure_builtin_modes(parsed) if parsed else _default_modes()
         else:
@@ -365,9 +360,7 @@ class SlumbrConfig:
         # ----- optional cycle-mode hotkey combo
         raw_cyc = data.get("cycle_mode_vks")
         if isinstance(raw_cyc, list):
-            kwargs["cycle_mode_vks"] = [
-                int(v) for v in raw_cyc if isinstance(v, (int, float))
-            ]
+            kwargs["cycle_mode_vks"] = [int(v) for v in raw_cyc if isinstance(v, (int, float))]
 
         # ----- clamp active_mode to an existing mode id
         mode_ids = {m.id for m in kwargs["modes"]}

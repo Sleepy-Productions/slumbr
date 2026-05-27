@@ -76,9 +76,7 @@ def _configure_logging() -> None:
 
         appdata = os.environ.get("APPDATA")
         log_dir = (
-            (Path(appdata) / "Slumbr" / "logs")
-            if appdata
-            else (Path.home() / ".slumbr" / "logs")
+            (Path(appdata) / "Slumbr" / "logs") if appdata else (Path.home() / ".slumbr" / "logs")
         )
         log_dir.mkdir(parents=True, exist_ok=True)
         log_path = log_dir / "slumbr.log"
@@ -155,9 +153,7 @@ def _install_crash_capture() -> None:
 
         appdata = os.environ.get("APPDATA")
         log_dir = (
-            (Path(appdata) / "Slumbr" / "logs")
-            if appdata
-            else (Path.home() / ".slumbr" / "logs")
+            (Path(appdata) / "Slumbr" / "logs") if appdata else (Path.home() / ".slumbr" / "logs")
         )
         log_dir.mkdir(parents=True, exist_ok=True)
         # Append so successive crashes accumulate.

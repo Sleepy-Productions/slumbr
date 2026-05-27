@@ -38,9 +38,7 @@ class WhisperEngine:
         self.model_size = model_size
         log.info("model loaded in %.1fs", time.monotonic() - t0)
 
-    def set_runtime_config(
-        self, *, language: str | None, initial_prompt: str
-    ) -> None:
+    def set_runtime_config(self, *, language: str | None, initial_prompt: str) -> None:
         """Update decode-time knobs without reloading the model.
 
         Both fields are forwarded to every subsequent `transcribe()` call.
