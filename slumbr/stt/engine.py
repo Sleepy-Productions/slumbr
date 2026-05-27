@@ -6,6 +6,8 @@ import time
 import numpy as np
 from faster_whisper import WhisperModel
 
+from .._bundled import bundled_models_root
+
 # Re-export TranscriptionError from the protocol module so legacy
 # imports of `slumbr.stt.engine.TranscriptionError` keep working.
 # The actual definition moved so the worker can use it without
@@ -13,6 +15,20 @@ from faster_whisper import WhisperModel
 from .protocol import TranscriptionError  # noqa: F401
 
 log = logging.getLogger(__name__)
+
+
+def _resolve_model(model_size: str) -> str:
+    """Map a Whisper size name to a bundled local CT2 model dir when one was
+    shipped in this frozen build, so first run is fully offline. Falls through
+    to the size name (Hugging Face download) for non-frozen runs or sizes that
+    weren't bundled."""
+    root = bundled_models_root()
+    if root is not None:
+        local = root / f"whisper-{model_size}"
+        if (local / "model.bin").is_file():
+            log.info("using bundled Whisper model from %s", local)
+            return str(local)
+    return model_size
 
 
 class WhisperEngine:
@@ -32,7 +48,7 @@ class WhisperEngine:
     ) -> None:
         log.info("loading %r on %s (%s)...", model_size, device, compute_type)
         t0 = time.monotonic()
-        self.model = WhisperModel(model_size, device=device, compute_type=compute_type)
+        self.model = WhisperModel(_resolve_model(model_size), device=device, compute_type=compute_type)
         self.language = language
         self.initial_prompt = initial_prompt or None
         self.model_size = model_size

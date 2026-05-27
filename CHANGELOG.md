@@ -9,6 +9,7 @@ Slumbr follows SemVer: **MAJOR** for breaking changes (config format / behavior)
 The **1.0 public launch.** One-click installers that run on any PC, a reorganized Settings UI, an in-memory ephemeral History, proper Windows app identity (no more "pins as Python"), and a pile of polish + correctness fixes.
 
 ### Added
+- **Offline first run — speech models ship inside the installer.** Both builds bundle their models so a fresh machine transcribes on first launch with no download and no network: the CPU build carries Moonshine + Silero-VAD + punctuation; the NVIDIA build adds Whisper large-v3-turbo. The model loaders resolve the bundled copy before any Hugging Face fetch, falling back to download only for opt-in models that weren't bundled (and for source/dev installs, which are unchanged).
 - **In-memory, ephemeral History.** Your recent transcripts are held in memory only (latest 50); at the cap the list clears and starts fresh. Nothing about your dictations is written to disk — no history file, no session logs, no crash dumps — and it's all gone the moment you close Slumbr. Copy any line out (or all) while it's there.
 - **Uninstaller cleans up after itself** — uninstalling offers to remove your `%APPDATA%\Slumbr` data (settings + downloaded Moonshine models), not just the program files.
 - **Advanced Settings tab** — virtual-cable picker + installer, auto-send, "keep transcript on clipboard", and the vocabulary hint, moved out of the everyday surfaces.
@@ -21,7 +22,7 @@ The **1.0 public launch.** One-click installers that run on any PC, a reorganize
 - **History is in-memory and capped at 50** — it never touches disk and clears at the cap (and on close), so nothing about your dictations persists. The debug log records events/errors but no transcript text.
 - **Windows app identity (AUMID).** Set on the process and on both shortcuts, so the taskbar button, pinning, jump list, and Start all read "Slumbr" instead of the host `pythonw.exe` / "Python".
 - **Brand mark is fixed monochrome white** everywhere (shell icon, taskbar, About logo) — it never follows the user's accent.
-- **Ships as one-click installers** — a universal **CPU build** that runs on any x64 Windows PC, plus an **NVIDIA build** for GPU-accelerated dictation; the source install (`install.ps1` from a clone, which auto-detects hardware and installs the matching backend) is still fully supported.
+- **Ships as one-click installers** — a universal **CPU build** that runs on any x64 Windows PC, plus an **NVIDIA build** for GPU-accelerated dictation. Both bundle their speech models, so first launch works offline with nothing to download (see Added). The source install (`install.ps1` from a clone, which auto-detects hardware and installs the matching backend) is still fully supported.
 
 ### Fixed
 - **Recurring "pink desktop icon."** `install.ps1` now busts the Windows shell icon cache (drop the cache DBs + `ie4uinit -show` + `SHChangeNotify`) so a stale tinted icon can't linger — the baked `.ico` and all runtime icons were already white.

@@ -9,6 +9,8 @@
 # transformers) stacks are excluded so the bundle stays ~150-300 MB instead
 # of 4-5 GB. faster-whisper falls back to CPU when the CUDA libs are absent.
 
+import os
+
 from PyInstaller.utils.hooks import collect_all, collect_submodules
 
 datas: list = []
@@ -27,6 +29,20 @@ for _pkg in ("sherpa_onnx", "ctranslate2", "faster_whisper", "huggingface_hub", 
 # Slumbr's own package + its assets (tray/popup icon).
 hiddenimports += collect_submodules("slumbr")
 datas += [("../slumbr/assets", "slumbr/assets")]
+
+# Bundled model weights → fully-offline first run. Staged into
+# packaging/bundled-models/ (gitignored; copied from %APPDATA%\Slumbr\models).
+# Each dir lands at <bundle>/models/<name>/, where slumbr/_bundled.py looks
+# before falling back to a Hugging Face download. CPU build ships the always-on
+# trio: Moonshine base (the CPU primary + popup partials), Silero VAD, online
+# punct. The opt-in cpu_ct2 Whisper tier still downloads on demand.
+_BUNDLED = os.path.join(SPECPATH, "bundled-models")
+for _sub in ("moonshine-base-en", "silero-vad", "online-punct-en"):
+    _msrc = os.path.join(_BUNDLED, _sub)
+    if os.path.isdir(_msrc):
+        datas += [(_msrc, "models/" + _sub)]
+    else:
+        raise SystemExit(f"[slumbr] missing bundled model dir: {_msrc} — stage it before building")
 
 # The factory imports backends lazily (`from .backends.X import …` inside
 # functions), so PyInstaller's static analysis can't see them — name them

@@ -52,7 +52,11 @@ CLAUDE.md
 build/
 dist/
 .venv-cpu/
+.venv-nvidia/
 packaging/dist-installer/
+# Model weights staged for offline-first-run bundling — large binaries,
+# copied from %APPDATA%\Slumbr\models + the HF cache by hand before a build.
+packaging/bundled-models/
 *.spec.bak
 # ...but the hand-written packaging specs ARE source (the global *.spec rule
 # near the top would otherwise drop them).
