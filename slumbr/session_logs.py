@@ -273,6 +273,11 @@ def _lock_owner() -> tuple[int | None, int | None]:
     for a legacy lock written before PID-reuse hardening."""
     try:
         data = json.loads(_lock_path().read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            # Valid JSON but not an object (e.g. "[1,2,3]" / a scalar / null from
+            # a corrupt or truncated write) — calling .get on it would crash the
+            # startup guard. Treat as no valid owner (→ recoverable, relaunchable).
+            return None, None
         ct = data.get("create_time")
         return int(data["pid"]), (int(ct) if ct is not None else None)
     except (OSError, KeyError, ValueError, TypeError, json.JSONDecodeError):

@@ -163,6 +163,23 @@ def test_killed_instance_does_not_block_relaunch(appdata):
     assert session_logs.previous_session_crashed() is True
 
 
+# ----- a corrupt lock.json must never crash the startup guards (it's read on
+# every launch). Valid-JSON-but-not-an-object used to crash _lock_owner on .get.
+
+@pytest.mark.parametrize("content", [
+    "{ not json", "", "   ", "[1,2,3]", "42", "null", '"hello"',
+    '{"started_at": 0}',                       # no pid
+    '{"pid": "abc"}', '{"pid": null}', '{"pid": [1, 2]}', '{"pid": 1.5}',
+    '{"pid": 4242, "create_time": "soon"}',    # garbage create_time
+])
+def test_corrupt_lock_never_crashes_startup_guards(appdata, content):
+    sdir = appdata / "Slumbr" / "session"
+    sdir.mkdir(parents=True, exist_ok=True)
+    (sdir / "lock.json").write_text(content, encoding="utf-8")
+    assert isinstance(session_logs.previous_session_crashed(), bool)
+    assert isinstance(session_logs.another_instance_running(), bool)
+
+
 # ---------------------------------------------------------- crash log
 
 
