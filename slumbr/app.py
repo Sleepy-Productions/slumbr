@@ -226,6 +226,12 @@ class SlumbrApp:
         #                         the virtual cable always hear the user
         #                         (except during dictation when MicMirror
         #                         is internally muted).
+        # Init the mic-mirror handle BEFORE the recorder: the recorder's
+        # continuous callback can fire the instant its stream opens, and
+        # ``_on_audio_continuous`` reads ``self.mic_mirror`` — assigning it
+        # here closes a startup race that logged a harmless AttributeError on
+        # every launch. ``_try_open_mic_mirror()`` populates it for real below.
+        self.mic_mirror: MicMirror | None = None
         self.recorder = AudioRecorder(
             device=self.config.input_device_name,
             on_chunk=self._on_audio_thread_chunk,
@@ -274,8 +280,8 @@ class SlumbrApp:
         # active, Slumbr passes the real mic to a virtual cable device
         # that call apps read from. The cable is fed silence during
         # dictation so other apps hear nothing while Slumbr's own
-        # capture stream keeps producing transcripts.
-        self.mic_mirror: MicMirror | None = None
+        # capture stream keeps producing transcripts. (The handle itself is
+        # initialized to None up by the recorder to avoid a startup race.)
         self._try_open_mic_mirror()
 
         # ----- Settings dialog is built lazily on first open so startup

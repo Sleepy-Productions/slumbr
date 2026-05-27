@@ -26,7 +26,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
-from ..config import SlumbrConfig
+from ..config import BackendConfig, SlumbrConfig
 from ..stt.factory import build_transcriber
 from ..stt.streaming_engine import StreamingASREngine
 from ..theme import BG_DARK, BORDER, FONT_DISPLAY, TEXT_PRIMARY, TEXT_SECONDARY, VIOLET_PRIMARY
@@ -38,32 +38,73 @@ log = logging.getLogger(__name__)
 _SHOW_AFTER_MS = 500
 
 
+def _cpu_fallback_backend() -> BackendConfig:
+    """The universal safety net: Moonshine on CPU. It's bundled in every build
+    (CPU + NVIDIA), needs no GPU, and only a one-time ~180 MB model download — so
+    it can stand in for ANY GPU backend that fails to load on a user's machine
+    (bad/old driver, missing wheels in the wrong frozen build, ONNX export
+    failure, OOM on warm-up). Without this, a single backend-load exception used
+    to hard-exit the whole app on someone else's hardware."""
+    return BackendConfig(name="moonshine", model="moonshine-base-en-int8")
+
+
 class _EngineWorker(QObject):
     """Builds + warms the transcriber and the streaming engine off the main
     thread. None of these are Qt objects, so they're safe to construct here."""
 
-    ready = Signal(object, object)  # (transcriber, streaming_engine)
+    ready = Signal(object, object)   # (transcriber, streaming_engine)
     failed = Signal(str)
+    fell_back = Signal(object, str)  # (fallback BackendConfig, human reason)
 
     def __init__(self, config: SlumbrConfig) -> None:
         super().__init__()
         self._config = config
 
+    def _build(self, backend: BackendConfig | None) -> object:
+        transcriber = build_transcriber(
+            backend,
+            language=self._config.language or None,
+            initial_prompt=self._config.initial_prompt,
+        )
+        transcriber.warm_up()
+        return transcriber
+
     def run(self) -> None:
+        primary = self._config.backend
         try:
-            transcriber = build_transcriber(
-                self._config.backend,
-                language=self._config.language or None,
-                initial_prompt=self._config.initial_prompt,
+            transcriber = self._build(primary)
+        except Exception as e:  # noqa: BLE001
+            log.exception(
+                "engine prep failed for backend=%s — trying CPU fallback",
+                getattr(primary, "name", primary),
             )
-            transcriber.warm_up()
+            fallback = _cpu_fallback_backend()
+            # If the primary WAS already the CPU fallback, there's nowhere left
+            # to fall — surface the real error.
+            if primary is not None and primary.name == fallback.name:
+                self.failed.emit(str(e))
+                return
+            try:
+                transcriber = self._build(fallback)
+            except Exception as e2:  # noqa: BLE001
+                log.exception("CPU fallback engine also failed")
+                self.failed.emit(f"{e}\n\n(CPU fallback also failed: {e2})")
+                return
+            self.fell_back.emit(
+                fallback,
+                f"Couldn't start the {getattr(primary, 'name', 'configured')} engine:\n\n"
+                f"{e}\n\nSlumbr switched to the built-in CPU engine (Moonshine) so it "
+                "keeps working. You can change this any time in Settings → Engine.",
+            )
+        try:
             streaming = StreamingASREngine(
                 enable_streaming_leading_edge=self._config.streaming_visual_leading_edge,
             )
-            self.ready.emit(transcriber, streaming)
         except Exception as e:  # noqa: BLE001
-            log.exception("engine preparation failed")
+            log.exception("streaming engine init failed")
             self.failed.emit(str(e))
+            return
+        self.ready.emit(transcriber, streaming)
 
 
 class _PreparingDialog(QDialog):
@@ -139,6 +180,7 @@ def prepare_engines(
 
     worker.ready.connect(_on_ready)
     worker.failed.connect(_on_failed)
+    worker.fell_back.connect(lambda fb, reason: result.update(fell_back=(fb, reason)))
     worker.ready.connect(thread.quit)
     worker.failed.connect(thread.quit)
     thread.started.connect(worker.run)
@@ -163,6 +205,18 @@ def prepare_engines(
             "model downloads once — then relaunch Slumbr.",
         )
         raise SystemExit(1)
+
+    # The primary backend failed but the CPU fallback worked — persist the
+    # switch so the next launch is instant (and doesn't re-hit the failure),
+    # then tell the user (informational, NOT fatal — the app keeps running).
+    if "fell_back" in result:
+        fb, reason = result["fell_back"]  # type: ignore[misc]
+        try:
+            config.backend = fb
+            config.save()
+        except Exception as e:  # noqa: BLE001
+            log.warning("could not persist CPU-fallback backend: %s", e)
+        QMessageBox.information(None, "Slumbr — switched to the CPU engine", reason)
 
     transcriber, streaming = result["ok"]  # type: ignore[misc]
     return transcriber, streaming
