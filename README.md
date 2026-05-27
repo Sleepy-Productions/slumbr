@@ -114,13 +114,15 @@ Models cache to `%APPDATA%\Slumbr\models` on first download — after that, Slum
 
 ## Mute other apps while dictating (reverse PTT)
 
-So your dictation doesn't get broadcast into a call. The universal path (recommended):
+![Slumbr's Voice tab — real mics only up top, and the Virtual mic cable section below: detect/install the cable, flip routing on, and pick the cable, all in one place](screenshots/voice.png)
 
-1. Right-click tray → Settings → **Advanced** tab
+So your dictation doesn't get broadcast into a call. The universal path (recommended) — it all lives on the **Voice** tab now:
+
+1. Right-click tray → Settings → **Voice** tab
 2. Under **"Virtual mic cable"**, click **"Install VB-Cable"** (Windows prompts for admin)
 3. **Reboot Windows** (kernel driver requirement)
-4. Re-launch Slumbr → Advanced shows "Detected 1 virtual cable" and auto-selects it
-5. Go to the **Behavior** tab → tick **"Virtual mic — route through a virtual cable…"**
+4. Re-launch Slumbr → the Voice tab shows "Cable ready" and auto-selects the cable
+5. In the same **Virtual mic cable** section, tick **"Route my mic through a virtual cable"**
 6. **In your call apps:** set the microphone to **"CABLE Output (VB-Audio Virtual Cable)"** (note: "Output" — VB-Cable names from the cable's perspective)
 7. Keep your *speaker* on your real headphones
 
@@ -144,10 +146,10 @@ Most Windows apps — including VS Code's terminal and Windows Terminal — acce
 Warm-up runs at startup; the first *real* transcription still pays a small one-time decoder cost. Subsequent utterances settle into the steady-state range.
 
 **Mic doesn't show up / wrong device picked.**
-Settings → Voice → Input device. Slumbr stores names (not numeric indices) so USB-mic hot-plug survives. With VB-Cable installed, **don't pick CABLE Output as your mic** — that's the cable's loopback side, not your real mic.
+Settings → Voice → Input device. The list shows your **real mics only** — virtual cables, Windows router aliases (Sound Mapper, Primary Sound Capture Driver), and loopback inputs (Stereo Mix, Line In) are filtered out, and duplicates across audio APIs are collapsed. Slumbr stores names (not numeric indices) so USB-mic hot-plug survives.
 
 **Discord (or another call app) doesn't hear me.**
-Check **Behavior** tab → "Virtual mic" is ticked, and **Advanced → Virtual mic cable** shows the right cable. In Discord, the mic must be **"CABLE Output (VB-Audio Virtual Cable)"** — counterintuitive name, but correct. The log at `%APPDATA%\Slumbr\logs\slumbr.log` shows `MicMirror started …` when routing is live.
+On the **Voice** tab → **Virtual mic cable** section, make sure **"Route my mic through a virtual cable"** is ticked and the right cable is selected. In Discord, the mic must be **"CABLE Output (VB-Audio Virtual Cable)"** — counterintuitive name, but correct. The log at `%APPDATA%\Slumbr\logs\slumbr.log` shows `MicMirror started …` when routing is live.
 
 ## Limitations
 
