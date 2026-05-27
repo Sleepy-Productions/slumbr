@@ -20,6 +20,7 @@ nothing to install. Phase 2 will re-expose them.
 from __future__ import annotations
 
 import logging
+import sys
 from collections.abc import Callable
 
 from PySide6.QtCore import QObject, QThread, QTimer, Signal
@@ -571,10 +572,42 @@ class SetupWizard(QDialog):
             self._stack.setCurrentIndex(4)
             self._update_footer_for_index(4)
             return
-        # Need to install — show the Install screen and kick off pip.
+        # In a FROZEN build there is no pip and no editable repo — the backend
+        # set is fixed at build time. If the recommended GPU backend isn't
+        # bundled in THIS download, attempting pip would dead-end the user; fall
+        # back to the always-bundled CPU engine (Moonshine) instead so they get
+        # a working app, and point them at the build that has their GPU support.
+        if getattr(sys, "frozen", False):
+            self._fallback_to_bundled(backend_name)
+            return
+        # Source install — show the Install screen and kick off pip.
         self._stack.setCurrentIndex(3)
         self._update_footer_for_index(3)
         self._start_install(extras, backend_name)
+
+    def _fallback_to_bundled(self, wanted: str) -> None:
+        """Frozen build can't pip-install ``wanted`` — commit the bundled CPU
+        engine (Moonshine, present in every build) so the user still gets a
+        working app, and tell them which build to grab for GPU acceleration."""
+        fallback = self._recommendation.runner_up if self._recommendation else None
+        if fallback is None or _extras_for_backend(fallback.name):
+            fallback = BackendConfig(name="moonshine", model="moonshine-base-en-int8")
+        self._config.backend = fallback
+        try:
+            self._config.save()
+        except Exception as e:  # noqa: BLE001
+            log.warning("config save failed in frozen fallback: %s", e)
+        log.info("frozen build lacks %s — falling back to bundled %s", wanted, fallback.name)
+        label = _BACKEND_LABELS.get(wanted, wanted)
+        self._done_summary.setText(
+            f"This download doesn't include the <b>{label}</b> engine for your "
+            "hardware, so Slumbr will run on the built-in <b>CPU engine "
+            "(Moonshine)</b> — it works on any PC. For GPU-accelerated dictation, "
+            "grab the build that matches your hardware from the Slumbr releases "
+            "page. You can switch any time from Settings → Engine."
+        )
+        self._stack.setCurrentIndex(4)
+        self._update_footer_for_index(4)
 
     def _start_install(self, extras: list[str], backend_name: str) -> None:
         self._install_log.clear()
