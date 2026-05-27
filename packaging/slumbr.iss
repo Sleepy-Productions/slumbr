@@ -47,3 +47,29 @@ Name: "{userstartup}\Slumbr"; Filename: "{app}\Slumbr.exe"; Tasks: startupicon
 
 [Run]
 Filename: "{app}\Slumbr.exe"; Description: "Launch Slumbr now"; Flags: nowait postinstall skipifsilent
+
+[Code]
+{ On uninstall, offer to remove the user data the app wrote to %APPDATA%\Slumbr
+  (settings, history, logs, and the downloaded Moonshine models). Inno only
+  removes the program files + shortcuts it installed; without this, that data
+  lingers after an uninstall. Interactive only — a silent uninstall leaves the
+  data in place (the safe default for scripted/automated removal). The large
+  Whisper weights live in the shared Hugging Face cache and are intentionally
+  left untouched, since other tools may share that cache. }
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+var
+  DataDir: String;
+begin
+  if CurUninstallStep = usPostUninstall then
+  begin
+    DataDir := ExpandConstant('{userappdata}\Slumbr');
+    if DirExists(DataDir) and (not UninstallSilent) then
+    begin
+      if MsgBox('Also remove your Slumbr settings, history, logs, and downloaded'
+                + ' speech models?' + #13#10 + #13#10 + DataDir + #13#10 + #13#10
+                + '(Large Whisper model weights in your shared Hugging Face cache'
+                + ' are left untouched.)', mbConfirmation, MB_YESNO) = IDYES then
+        DelTree(DataDir, True, True, True);
+    end;
+  end;
+end;
