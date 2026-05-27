@@ -6,10 +6,11 @@ Slumbr follows SemVer: **MAJOR** for breaking changes (config format / behavior)
 
 ## [1.0.0] — 2026-05-27
 
-The **1.0 public launch.** One-click installers that run on any PC, a reorganized Settings UI, a session-scoped History with a recovery safety net, proper Windows app identity (no more "pins as Python"), and a pile of polish + correctness fixes.
+The **1.0 public launch.** One-click installers that run on any PC, a reorganized Settings UI, an in-memory ephemeral History, proper Windows app identity (no more "pins as Python"), and a pile of polish + correctness fixes.
 
 ### Added
-- **Session logs + crash recovery.** When live History fills to 30 it rolls the batch into a temporary *session log* and the list resets fresh; rolled batches are browsable from a "Session logs" drill-in and cleared on a clean quit. If Slumbr closes unexpectedly, the last session's transcripts are written to `%APPDATA%\Slumbr\crash-logs\` and offered back via a Recover / Discard prompt on next launch; uncaught exceptions also drop a traceback crash log.
+- **In-memory, ephemeral History.** Your recent transcripts are held in memory only (latest 50); at the cap the list clears and starts fresh. Nothing about your dictations is written to disk — no history file, no session logs, no crash dumps — and it's all gone the moment you close Slumbr. Copy any line out (or all) while it's there.
+- **Uninstaller cleans up after itself** — uninstalling offers to remove your `%APPDATA%\Slumbr` data (settings + downloaded Moonshine models), not just the program files.
 - **Advanced Settings tab** — virtual-cable picker + installer, auto-send, "keep transcript on clipboard", and the vocabulary hint, moved out of the everyday surfaces.
 - **Copy from History** — per row (double-click / right-click / Ctrl+C) and "Copy all".
 - **Start Menu shortcut** alongside the desktop one, so Slumbr is findable in Start search.
@@ -17,7 +18,7 @@ The **1.0 public launch.** One-click installers that run on any PC, a reorganize
 
 ### Changed
 - **Settings is now a grouped left-sidebar** (Setup / Preferences / Info) instead of top tabs, restyled on a house design system (Inter/Sora, 8pt spacing, one radius scale, disabled states, fade-in). Opens centered on launch.
-- **History is session-scoped** — resets each launch; the live list never exceeds 30 (older batches roll into session logs).
+- **History is in-memory and capped at 50** — it never touches disk and clears at the cap (and on close), so nothing about your dictations persists. The debug log records events/errors but no transcript text.
 - **Windows app identity (AUMID).** Set on the process and on both shortcuts, so the taskbar button, pinning, jump list, and Start all read "Slumbr" instead of the host `pythonw.exe` / "Python".
 - **Brand mark is fixed monochrome white** everywhere (shell icon, taskbar, About logo) — it never follows the user's accent.
 - **Ships as one-click installers** — a universal **CPU build** that runs on any x64 Windows PC, plus an **NVIDIA build** for GPU-accelerated dictation; the source install (`install.ps1` from a clone, which auto-detects hardware and installs the matching backend) is still fully supported.

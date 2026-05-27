@@ -8,7 +8,6 @@ repetition collapse.
 
 from slumbr.polish import polish
 
-
 # ----- regression: a user word-replacement value must be applied LITERALLY.
 # A correction containing a backslash/group-ref used to crash re.sub (e.g. \1 =
 # "invalid group reference", trailing "\" = "bad escape") or silently corrupt

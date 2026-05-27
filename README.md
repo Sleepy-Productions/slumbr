@@ -87,9 +87,9 @@ cd slumbr
 
 ![Customization tab — pick any accent color and choose the recording-popup style](screenshots/step3-customize.png)
 
-**4 · Everything stays local.** Your recent transcripts show in History, newest first — copy any one out or clear them, anytime. When the list fills it rolls into a **Session log** you can dig back into (a fallback for the one that scrolled off), and everything clears when you close Slumbr. Nothing ever leaves your machine.
+**4 · Everything stays local — and ephemeral.** Your recent transcripts show in History, newest first — copy any one out (or all) and clear them anytime. The list holds your latest 50, in memory only; at the cap it clears and starts fresh. Nothing is written to disk, and the whole list is gone the moment you close Slumbr. Nothing ever leaves your machine.
 
-![History tab — your recent transcripts with timestamps; older batches roll into temporary Session logs. Stored locally, never sent anywhere](screenshots/step4-history.png)
+![History tab — your recent transcripts with timestamps; in-memory only, capped at 50, and gone when you close Slumbr](screenshots/step4-history.png)
 
 ### Two engines under the hood
 
@@ -112,7 +112,7 @@ Models cache to `%APPDATA%\Slumbr\models` on first download — after that, Slum
 - **Live partials while you speak.** Moonshine + Silero VAD + online punctuation give the popup smooth word-by-word text that grows monotonically.
 - **Tap-to-toggle Caps Lock hotkey.** No press-and-hold, no wake-word. The OS-level Caps Lock state is never flipped while Slumbr is running. Rebind to any key or chord in Settings → Shortcuts.
 - **Auto-paste at the cursor.** Works in Notepad, browsers, chat apps, terminals (Ctrl+Shift+V mode), and Electron IDEs like VS Code.
-- **Copy from history + session-log fallback.** A dictation that landed with no field focused still saves to History — double-click, right-click, or Ctrl+C to copy any transcript out, or "Copy all". When History fills, the batch rolls into a temporary **Session log** so a transcript that scrolled off is never lost; session logs clear when you close Slumbr. If Slumbr ever closes unexpectedly, it offers to recover the last session.
+- **Copy from history (in-memory, ephemeral).** A dictation that landed with no field focused still shows in History — double-click, right-click, or Ctrl+C to copy any transcript out, or "Copy all". History keeps your latest 50 in memory only; at the cap it clears and starts fresh, and the whole list is gone when you close Slumbr. Nothing is written to disk.
 - **Mute other apps while dictating.** One-click VB-Cable install + auto-config → call apps hear silence during dictation while Slumbr keeps capturing. Works in Discord / Zoom / Teams / OBS / browser calls. (Discord users can alternatively use Discord's own Push-to-Mute keybind — no cable needed.)
 - **Customizable accent.** One color recolors the whole app — audio visualizer, "✓ Sent" flash, settings UI, tray icon — live, and persists across restarts. (Neutral by default; the brand mark stays monochrome.)
 - **System tray + sidebar Settings.** No hub window — the tray is the only persistent surface. Settings uses a clean left-sidebar nav grouped into **Setup** (Engine · Voice · Shortcuts), **Preferences** (Behavior · Customization · Advanced), and **Info** (History · About).
@@ -149,7 +149,7 @@ Now Caps Lock silences your mic in every call app while Slumbr keeps transcribin
 
 ## Privacy
 
-Slumbr never makes a network call at runtime. Models download once from Hugging Face on first launch, cached at `%APPDATA%\Slumbr\models`. Audio buffers live in RAM only and are discarded after transcription. Transcripts stay local only: the current batch at `%APPDATA%\Slumbr\history.jsonl` and any rolled batches under `%APPDATA%\Slumbr\session\` — both cleared when you close Slumbr. If Slumbr closes unexpectedly, the last session's transcripts are saved to `%APPDATA%\Slumbr\crash-logs\` for recovery (kept until you clear them; only the 10 most recent are retained). The rotating debug log at `%APPDATA%\Slumbr\logs\slumbr.log` also records transcript text for troubleshooting. All of it is local-only, never uploaded, and safe to delete. No accounts, no telemetry, no analytics.
+Slumbr never makes a network call at runtime. Models download once from Hugging Face on first launch, cached at `%APPDATA%\Slumbr\models`. Audio buffers live in RAM only and are discarded after transcription. **Your transcripts are never written to disk** — History is in-memory only (your latest 50), clears at the cap, and is gone the moment you close Slumbr. No history file, no session logs, no crash dumps of your dictations. The rotating debug log at `%APPDATA%\Slumbr\logs\slumbr.log` records events and errors for troubleshooting but **not** transcript text. No accounts, no telemetry, no analytics.
 
 ## Troubleshooting
 

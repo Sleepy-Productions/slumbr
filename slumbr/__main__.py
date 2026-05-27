@@ -17,22 +17,15 @@ log = logging.getLogger("slumbr")
 
 
 def _install_crash_excepthook() -> None:
-    """On an uncaught exception, auto-write a traceback crash log before the
-    default handler runs — so a hard crash leaves a breadcrumb even when the
-    next-launch recovery flow can't reconstruct what happened. KeyboardInterrupt
-    is left alone (not a crash)."""
-    import traceback
-
+    """On an uncaught exception, log the traceback to the rotating debug log
+    before the default handler runs — so a hard crash leaves a breadcrumb for
+    troubleshooting. No separate crash files, and a traceback carries no
+    transcript data. KeyboardInterrupt is left alone (not a crash)."""
     prev = sys.excepthook
 
     def hook(exc_type, exc, tb):
         if not issubclass(exc_type, KeyboardInterrupt):
-            try:
-                from .session_logs import write_crash_traceback
-
-                write_crash_traceback("".join(traceback.format_exception(exc_type, exc, tb)))
-            except Exception:  # noqa: BLE001
-                pass
+            log.critical("uncaught exception", exc_info=(exc_type, exc, tb))
         prev(exc_type, exc, tb)
 
     sys.excepthook = hook

@@ -106,32 +106,13 @@ class SlumbrApp:
         # ----- Config (with legacy → BackendConfig migration).
         self.config = SlumbrConfig.load()
 
-        # ----- Session-log lifecycle. If the previous session left its running
-        # marker behind, it crashed — gather everything it produced (rolled
-        # batches + the live partial, chronological), dump a durable crash log,
-        # and flag a recovery prompt for once the UI is up. Otherwise it shut
-        # down cleanly → start fresh (History is session-scoped). ``begin()``
-        # (drops this session's marker) is called after the wizard, so a
-        # cancelled first-run doesn't masquerade as a crash next time.
-        self._pending_recovery = 0
+        # ----- History is in-memory and ephemeral — nothing about dictations is
+        # written to disk, so there's nothing to recover and nothing to clean up
+        # but a possibly-stale single-instance lock from an unclean prior exit.
+        # Start fresh; ``begin()`` drops this session's marker after the wizard.
         self._restarting = False
-        if session_logs.previous_session_crashed():
-            recovered = []
-            for meta in session_logs.list_batches():
-                recovered.extend(session_logs.load_batch(meta.index))
-            recovered.extend(history.load_all())
-            if recovered:
-                session_logs.write_crash_log(recovered)
-                self._pending_recovery = len(recovered)
-                log.info(
-                    "previous session crashed — %d transcripts recoverable",
-                    len(recovered),
-                )
-            else:
-                session_logs.reset()
-        else:
-            history.clear()
-            session_logs.reset()
+        history.clear()
+        session_logs.reset()
 
         # ----- Taskbar / window icon = the moon-v2 brand mark in the FIXED
         # monochrome brand color (branding.LOGO_COLOR = white). It does NOT
@@ -417,8 +398,9 @@ class SlumbrApp:
             replacements=self.config.word_replacements,
             strip_filler=True,  # always strip end-of-clip hallucinations — never a choice
         )
-        log.info("transcript: %r", polished)
-        log.debug("raw=%r polished=%r", raw, polished)
+        # Log only the LENGTH, never the transcript text — Slumbr keeps no
+        # record of what you dictated, on disk or in the log.
+        log.info("transcript ready (%d chars)", len(polished))
         if not polished:
             self._reset_to_idle()
             return
@@ -801,27 +783,7 @@ class SlumbrApp:
         self.tray.stop()
         self.qapp.quit()
 
-    def _show_recovery(self) -> None:
-        """Offer to restore a crashed session's transcripts. Recover leaves the
-        rolled batches + live partial in place (they reappear under History +
-        Session logs); Discard wipes them. The crash-log file written at startup
-        stays either way, so nothing is ever truly lost without consent."""
-        n = getattr(self, "_pending_recovery", 0)
-        if not n:
-            return
-        from .ui.recovery_dialog import RecoveryDialog
-
-        dlg = RecoveryDialog(n, self.config.accent_color, self._app_icon)
-        if dlg.exec() != QDialog.Accepted:  # Discard
-            session_logs.reset()
-            history.clear()
-        self._pending_recovery = 0
-
     def run(self) -> int:
-        # If the previous session crashed, offer recovery first (modal), then
-        # surface Settings.
-        if getattr(self, "_pending_recovery", 0):
-            QTimer.singleShot(600, self._show_recovery)
         # Surface Settings (centered) shortly after boot so launching Slumbr
         # always shows a window, not just a tray icon. 800 ms lets boot settle.
         QTimer.singleShot(800, self._open_settings_on_launch)
