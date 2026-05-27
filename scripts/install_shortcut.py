@@ -30,6 +30,15 @@ ROOT = Path(__file__).resolve().parents[1]
 VENV_PYTHONW = ROOT / ".venv" / "Scripts" / "pythonw.exe"
 VENV_SLUMBR = ROOT / ".venv" / "Scripts" / "Slumbr.exe"
 FROZEN_EXE = ROOT / "dist" / "Slumbr" / "Slumbr.exe"
+# The STABLE, shipped install (Inno → {autopf}\Slumbr, which for a per-user
+# install resolves to %LOCALAPPDATA%\Programs\Slumbr). A pinned shortcut should
+# point HERE, not at the volatile dist/ build dir — that's what makes it
+# "persistent": it survives `pyinstaller` rebuilds (which wipe dist/), exactly
+# like YT Grab points its shortcut at %LOCALAPPDATA%\Programs\YTGrab.
+_LOCALAPPDATA = os.environ.get("LOCALAPPDATA")
+INSTALLED_EXE = (
+    Path(_LOCALAPPDATA) / "Programs" / "Slumbr" / "Slumbr.exe" if _LOCALAPPDATA else None
+)
 ICON_PATH = ROOT / "slumbr" / "assets" / "icon.ico"
 SHORTCUT_NAME = "Slumbr.lnk"
 _DESCRIPTION = "Slumbr — local voice-to-text dictation"
@@ -39,12 +48,21 @@ _SW_SHOWMINNOACTIVE = 7  # pythonw has no window; this just avoids a transient f
 def _target() -> tuple[Path, str, Path]:
     """What the shortcut launches, as (target, arguments, working_dir).
 
-    Prefer the FROZEN build (dist/Slumbr/Slumbr.exe) when present: it's a real
-    self-owned process that owns its window, so the taskbar/pin read "Slumbr"
-    with the brand icon. No arguments (the exe IS the app); working dir is its
-    own folder so the onedir _internal/ resolves. Otherwise fall back to the
-    venv launcher running `-m slumbr` (source install — pins as Python, a
-    pythonw/venv-redirector limitation)."""
+    Precedence (most-stable first):
+      1. INSTALLED build (%LOCALAPPDATA%\\Programs\\Slumbr\\Slumbr.exe) — the
+         shipped copy. Point here so the shortcut is PERSISTENT: it keeps
+         working across `dist/` rebuilds (PyInstaller wipes dist/ each build).
+         This mirrors YT Grab, whose shortcut targets its installed Programs copy.
+      2. FROZEN dist build (dist/Slumbr/Slumbr.exe) — exists right after a build
+         but before an Inno install; volatile, so only a fallback.
+      3. venv launcher running `-m slumbr` — pure source/dev install.
+    Cases 1-2 are real self-owned processes that own their window, so the
+    taskbar/pin read "Slumbr" with the brand icon. Case 3 pins as Python
+    (a pythonw/venv-redirector limitation; brand_launcher.py mitigates the icon).
+    No arguments for the exe cases (the exe IS the app); working dir is its own
+    folder so the onedir _internal/ resolves."""
+    if INSTALLED_EXE is not None and INSTALLED_EXE.is_file():
+        return INSTALLED_EXE, "", INSTALLED_EXE.parent
     if FROZEN_EXE.is_file():
         return FROZEN_EXE, "", FROZEN_EXE.parent
     launcher = VENV_SLUMBR if VENV_SLUMBR.is_file() else VENV_PYTHONW
@@ -71,8 +89,13 @@ def _start_menu_dir() -> Path | None:
 
 def _check_prereqs() -> None:
     missing: list[str] = []
-    if not FROZEN_EXE.is_file() and not VENV_PYTHONW.is_file():
-        missing.append(f"no launcher: neither {FROZEN_EXE} nor {VENV_PYTHONW}")
+    have_launcher = (
+        (INSTALLED_EXE is not None and INSTALLED_EXE.is_file())
+        or FROZEN_EXE.is_file()
+        or VENV_PYTHONW.is_file()
+    )
+    if not have_launcher:
+        missing.append(f"no launcher: none of {INSTALLED_EXE}, {FROZEN_EXE}, {VENV_PYTHONW}")
     if not ICON_PATH.is_file():
         missing.append(f"missing icon: {ICON_PATH} — run scripts/build_icon.py first")
     if missing:
@@ -98,7 +121,12 @@ def _make_shortcut(out_path: Path) -> bool:
     link.SetPath(str(target))
     link.SetArguments(args)
     link.SetWorkingDirectory(str(workdir))
-    link.SetIconLocation(str(ICON_PATH), 0)
+    # When the target is a branded Slumbr.exe (installed/frozen build, or the
+    # brand_launcher'd venv copy) it embeds the brand icon at index 0 — use that
+    # so the shortcut is self-contained and never depends on the repo's assets
+    # path. Only the bare pythonw fallback needs the separate icon.ico.
+    icon_src = str(target) if target.name.lower() == "slumbr.exe" else str(ICON_PATH)
+    link.SetIconLocation(icon_src, 0)
     link.SetDescription(_DESCRIPTION)
     link.SetShowCmd(_SW_SHOWMINNOACTIVE)
 

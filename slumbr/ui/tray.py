@@ -23,7 +23,7 @@ import logging
 from collections.abc import Callable
 
 import pystray
-from PIL import Image, ImageDraw
+from PIL import Image
 
 from .. import history
 from ..config import SlumbrConfig
@@ -42,12 +42,21 @@ _LAST_TRANSCRIPT_MAX = 60
 
 
 def _icon_image(color: str) -> Image.Image:
-    img = Image.new("RGBA", (_ICON_SIZE, _ICON_SIZE), (0, 0, 0, 0))
-    d = ImageDraw.Draw(img)
-    halo = tuple(int(color[i : i + 2], 16) for i in (1, 3, 5)) + (90,)
-    d.ellipse((0, 0, _ICON_SIZE, _ICON_SIZE), fill=halo)
-    d.ellipse((6, 6, _ICON_SIZE - 6, _ICON_SIZE - 6), fill=color)
-    return img
+    """The Slumbr brand moon recolored to ``color`` — i.e. the same mark as the
+    app/taskbar/window icon, not a generic dot, so the tray reads as Slumbr.
+    ``color`` is the current state's accent shade (idle vs recording vs
+    transcribing), so the moon still signals state by its tint. colorized_glyph
+    returns the mark cropped-to-fill on transparency — drop-in for pystray."""
+    from ..branding import colorized_glyph
+
+    im = colorized_glyph(color, _ICON_SIZE).convert("RGBA")
+    # Harden the alpha: the master art leaves a faint glow over its whole square,
+    # which is invisible on a dark taskbar but shows as a grey box on a LIGHT
+    # one. Drop near-transparent pixels so only the mark itself survives.
+    r, g, b, a = im.split()
+    a = a.point(lambda v: 0 if v < 48 else v)
+    im.putalpha(a)
+    return im
 
 
 def _last_transcript_label() -> str:

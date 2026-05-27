@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
+import sys
 import time
 
 import pytest
@@ -113,6 +115,52 @@ def test_live_other_instance_is_not_a_crash(appdata):
     _write_lock(appdata, os.getppid())
     assert session_logs.another_instance_running() is True
     assert session_logs.previous_session_crashed() is False
+
+
+# ----- PID-liveness: a force-killed process must read as DEAD even while a
+# handle to it lingers (Task Manager / parent shell), or the next launch from
+# the pinned shortcut misfires as a phantom "already running". Regression for
+# the zombie-handle bug: OpenProcess still succeeds on a terminated process, so
+# _pid_alive must additionally check the exit code (GetExitCodeProcess != 259).
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows process-handle semantics")
+def test_pid_alive_true_for_self():
+    assert session_logs._pid_alive(os.getpid()) is True
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows process-handle semantics")
+def test_killed_process_reads_dead_even_with_handle_held():
+    # Keep the Popen object alive -> Windows keeps a handle open -> the dead
+    # PID stays OpenProcess-able (a zombie). The hardened check must still say
+    # "not alive".
+    p = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
+    try:
+        assert session_logs._pid_alive(p.pid) is True  # sanity: alive while running
+        p.kill()
+        p.wait()
+        assert session_logs._pid_alive(p.pid) is False  # the fix
+    finally:
+        if p.poll() is None:
+            p.kill()
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows process-handle semantics")
+def test_killed_instance_does_not_block_relaunch(appdata):
+    # End-to-end: a lock left by a force-killed instance (real PID + the
+    # create_time it would have recorded) must NOT count as "another instance",
+    # so the pinned shortcut relaunches cleanly. It IS a crash (owner gone).
+    p = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
+    ct = session_logs._pid_create_time(p.pid)
+    p.kill()
+    p.wait()
+    sdir = appdata / "Slumbr" / "session"
+    sdir.mkdir(parents=True, exist_ok=True)
+    (sdir / "lock.json").write_text(
+        json.dumps({"pid": p.pid, "started_at": 0.0, "create_time": ct}),
+        encoding="utf-8",
+    )
+    assert session_logs.another_instance_running() is False
+    assert session_logs.previous_session_crashed() is True
 
 
 # ---------------------------------------------------------- crash log

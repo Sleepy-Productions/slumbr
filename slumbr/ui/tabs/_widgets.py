@@ -24,6 +24,7 @@ from ...theme import (
     BG_PANEL,
     BG_PANEL_HI,
     BORDER,
+    FONT_BODY,
     FONT_DISPLAY,
     RADIUS_CARD,
     RADIUS_PILL,
@@ -77,6 +78,40 @@ def section_card(title: str) -> tuple[QFrame, QVBoxLayout]:
     hdr.setStyleSheet(f"color: {TEXT_PRIMARY};")
     v.addWidget(hdr)
     return card, v
+
+
+def section_nav_header(label: str, *, first: bool = False) -> QWidget:
+    """A sidebar SECTION LABEL (SETUP / PREFERENCES / INFO) for the Settings
+    nav. Deliberately styled to NOT read like the clickable page rows under it:
+    a hairline divider opens each group, then the label sits in dim, wide
+    letter-spaced uppercase caps. The rule + recessed color make it unmistakably
+    a heading — fixing the "headers look tappable" blend. ``first`` drops the
+    divider on the very top group (nothing to separate from above)."""
+    w = QWidget()
+    w.setObjectName("navSection")
+    lay = QVBoxLayout(w)
+    # No horizontal margin — the enclosing QListWidget::item already pads 14px.
+    lay.setContentsMargins(0, 2 if first else 12, 0, 2)
+    lay.setSpacing(8)
+    if not first:
+        rule = QFrame()
+        rule.setObjectName("navSectionRule")
+        rule.setFixedHeight(1)
+        lay.addWidget(rule)
+    lbl = QLabel(label.upper())
+    lbl.setObjectName("navSectionText")
+    f = QFont(FONT_BODY)
+    f.setPointSize(8)
+    f.setBold(True)
+    f.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1.6)
+    lbl.setFont(f)
+    lay.addWidget(lbl)
+    w.setStyleSheet(
+        f"#navSection {{ background: {BG_PANEL}; }}"
+        f"#navSectionText {{ color: {TEXT_SECONDARY}; background: transparent; }}"
+        f"#navSectionRule {{ background: {BORDER}; border: none; }}"
+    )
+    return w
 
 
 def glyph_pixmap(color_hex: str, size: int = 256) -> QPixmap:
