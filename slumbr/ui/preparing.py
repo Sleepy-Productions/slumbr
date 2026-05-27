@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
+from .._bundled import bundled_models_root
 from ..config import BackendConfig, SlumbrConfig
 from ..stt.factory import build_transcriber
 from ..stt.streaming_engine import StreamingASREngine
@@ -109,7 +110,11 @@ class _EngineWorker(QObject):
 
 class _PreparingDialog(QDialog):
     def __init__(
-        self, model: str, app_icon: QIcon | None = None, accent: str = VIOLET_PRIMARY
+        self,
+        model: str,
+        app_icon: QIcon | None = None,
+        accent: str = VIOLET_PRIMARY,
+        bundled: bool = False,
     ) -> None:
         super().__init__()
         self.setWindowTitle("Slumbr")
@@ -138,11 +143,21 @@ class _PreparingDialog(QDialog):
         title.setFont(tf)
         lay.addWidget(title)
 
-        sub = QLabel(
-            f"Loading the {model} model. The first run downloads it once "
-            "(this can take a minute on a slow connection) — after that, "
-            "startup is instant."
-        )
+        if bundled:
+            # Frozen build ships the model — no download, just the one-time
+            # load into memory/VRAM. After the OS file cache warms, instant.
+            sub_text = (
+                f"Loading the {model} model into memory. "
+                "This only takes a moment on the first launch — after that, "
+                "startup is instant."
+            )
+        else:
+            sub_text = (
+                f"Loading the {model} model. The first run downloads it once "
+                "(this can take a minute on a slow connection) — after that, "
+                "startup is instant."
+            )
+        sub = QLabel(sub_text)
         sub.setWordWrap(True)
         sub.setStyleSheet(f"color: {TEXT_SECONDARY};")
         lay.addWidget(sub)
@@ -186,7 +201,9 @@ def prepare_engines(
     thread.started.connect(worker.run)
 
     model = config.backend.model if config.backend else "speech"
-    dialog = _PreparingDialog(model, app_icon, config.accent_color)
+    dialog = _PreparingDialog(
+        model, app_icon, config.accent_color, bundled=bundled_models_root() is not None
+    )
 
     thread.start()
     # Only show the dialog if prep hasn't already finished — keeps cached

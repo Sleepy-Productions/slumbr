@@ -70,6 +70,8 @@ from pathlib import Path
 import numpy as np
 import sherpa_onnx
 
+from .._bundled import bundled_models_root
+
 log = logging.getLogger(__name__)
 
 
@@ -170,6 +172,13 @@ def _ensure_moonshine(variant: str = "base") -> dict[str, str]:
     if all((mdir / f).is_file() for f in _MOONSHINE_FILES):
         return {f: str(mdir / f) for f in _MOONSHINE_FILES}
 
+    bundled = bundled_models_root()
+    if bundled is not None:
+        bdir = bundled / mdir.name  # e.g. "moonshine-base-en"
+        if all((bdir / f).is_file() for f in _MOONSHINE_FILES):
+            log.info("using bundled Moonshine %s from %s", variant, bdir)
+            return {f: str(bdir / f) for f in _MOONSHINE_FILES}
+
     log.info("downloading Moonshine %s int8 to %s", variant, mdir)
     mdir.mkdir(parents=True, exist_ok=True)
     from huggingface_hub import snapshot_download
@@ -191,6 +200,12 @@ def _ensure_vad() -> str:
     target = _VAD_DIR / _VAD_FILENAME
     if target.is_file():
         return str(target)
+    bundled = bundled_models_root()
+    if bundled is not None:
+        b = bundled / "silero-vad" / _VAD_FILENAME
+        if b.is_file():
+            log.info("using bundled Silero VAD from %s", b)
+            return str(b)
     log.info("downloading Silero VAD (~2 MB) to %s", _VAD_DIR)
     _download_url(_VAD_URL, target)
     return str(target)
@@ -206,6 +221,14 @@ def _ensure_punct() -> tuple[str, str] | None:
     vocab_path = _PUNCT_DIR / _PUNCT_VOCAB_FILE
     if model_path.is_file() and vocab_path.is_file():
         return str(model_path), str(vocab_path)
+
+    bundled = bundled_models_root()
+    if bundled is not None:
+        bm = bundled / "online-punct-en" / _PUNCT_MODEL_FILE
+        bv = bundled / "online-punct-en" / _PUNCT_VOCAB_FILE
+        if bm.is_file() and bv.is_file():
+            log.info("using bundled online-punct from %s", bm.parent)
+            return str(bm), str(bv)
 
     try:
         log.info("downloading online punctuation model (~30 MB) to %s", _PUNCT_DIR)
