@@ -44,6 +44,17 @@ Tests:
 pytest
 ```
 
+CI runs the same suite on Windows across Python 3.10–3.12 on every push/PR (`.github/workflows/test.yml`); `ruff` lint + format run alongside it.
+
+## Building the installers (maintainers)
+
+```powershell
+pip install -e ".[package]"   # PyInstaller — see the version note below
+.\packaging\build.bat         # or run the PyInstaller spec directly
+```
+
+Slumbr pins **PyInstaller 6.8.0** (the `package` extra). Build with that exact version: newer PyInstaller releases have changed bootloader/hook behavior in ways that previously broke the frozen CUDA preload and the no-console wrapper. If you bump it, do a full clean-machine first-run test of **both** the CPU and NVIDIA installers before shipping.
+
 ## Architecture in a paragraph
 
 Single Python process. One `QApplication`. A `pystray.Icon` runs the tray in its own thread. The state machine (`IDLE → RECORDING → TRANSCRIBING → PASTING → IDLE`) lives on the Qt main thread. The **final** transcribe is produced by a pluggable backend chosen for the user's hardware (faster-whisper/CUDA, ONNX DirectML, or Moonshine/CPU) via `slumbr/stt/factory.py`, run off the main thread in a `QThread`. A **streaming** engine (Moonshine + Silero VAD + online punctuation, always on CPU) drives the live popup partials while you speak. PortAudio captures audio on its own callback thread and emits a Qt signal so the visualizer can paint safely on the main thread.

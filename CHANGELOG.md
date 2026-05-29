@@ -4,6 +4,20 @@ All notable changes to Slumbr are documented in this file. The format follows [K
 
 Slumbr follows SemVer: **MAJOR** for breaking changes (config format / behavior), **MINOR** for new features, **PATCH** for fixes.
 
+## [Unreleased]
+
+### Added
+- **Opt-in persistent history.** Settings → History → *Keep history across restarts* saves transcripts to an unencrypted SQLite file at `%APPDATA%\Slumbr\history.db` so they survive a restart. Off by default; turning it back off deletes the file (the ephemeral-by-default privacy story is preserved).
+- CI now runs the test suite on Windows across Python 3.10–3.12 on every push/PR (was lint-only).
+- README: a "Why Slumbr?" comparison, a vocabulary-hint explainer, and documented transcription-failure behavior; CONTRIBUTING: an installer-build section noting the pinned PyInstaller version.
+
+### Changed
+- **History is now a rolling window of the latest 200** (was 50): past the cap the *oldest* entry drops instead of the whole list being wiped, so recent dictations are always kept.
+- Loosened exact dependency pins (`sounddevice`, `pynput`, `PySide6`) to tested floors and added a `huggingface_hub>=0.20` floor; added `pytest-mock` + `coverage` to the `dev` extra.
+
+### Fixed
+- README "no admin required" now flags the optional VB-Cable / reverse-PTT exception.
+
 ## [1.0.0] — 2026-05-27
 
 The **1.0 public launch.** One-click installers that run on any PC, a reorganized Settings UI, an in-memory ephemeral History, proper Windows app identity (no more "pins as Python"), and a pile of polish + correctness fixes.
