@@ -129,12 +129,14 @@ def backend_options(profile: HardwareProfile) -> list[Option]:
     ]
 
 
-# CUDA Whisper model ladder, heaviest→lightest. ``large-v3-turbo`` is the
-# top pick (within ~1% WER of large-v3 but ~3x faster — the right call for
-# seamless dictation), so plain ``large-v3`` is intentionally not offered.
-_CUDA_LADDER: tuple[str, ...] = ("large-v3-turbo", "medium", "small", "base")
+# CUDA Whisper model ladder, heaviest→lightest. Full ``large-v3`` sits at the
+# top for high-VRAM cards (>=10 GB) where it still decodes in ~1 s — it's the
+# most accurate option, worth the extra latency for heavy dictation. Mid cards
+# get ``large-v3-turbo`` as the seamless default (within ~1% WER, ~3x faster).
+_CUDA_LADDER: tuple[str, ...] = ("large-v3", "large-v3-turbo", "medium", "small", "base")
 _CUDA_NOTES: dict[str, str] = {
-    "large-v3-turbo": "Fast + near-best accuracy. The seamless default.",
+    "large-v3": "Most accurate. Best on high-VRAM GPUs (~1 s on a strong card).",
+    "large-v3-turbo": "Near-best accuracy, ~3x faster. The seamless default.",
     "medium": "More accurate than small, moderate VRAM.",
     "small": "Fast, low memory.",
     "base": "Smallest footprint — for low-VRAM cards.",
@@ -147,15 +149,17 @@ def _cuda_ladder_start(vram_gb: float) -> int:
     Conservative: a model offered here must actually load + decode without
     OOM, since the Engine tab lets the user pick the "Recommended" tier
     blind. Unknown VRAM (0) is treated as small-class to stay safe."""
+    if vram_gb >= 10:
+        return 0  # large-v3 — full accuracy; only where it stays ~1 s fast
     if vram_gb >= 7.5:
-        return 0  # turbo
+        return 1  # large-v3-turbo
     if vram_gb >= 5:
-        return 1  # medium
+        return 2  # medium
     if vram_gb >= 3:
-        return 2  # small
+        return 3  # small
     if vram_gb <= 0:
-        return 2  # unknown — small is the safe, still-capable default
-    return 3  # base (tiny cards)
+        return 3  # unknown — small is the safe, still-capable default
+    return 4  # base (tiny cards)
 
 
 def model_options(backend_name: str, profile: HardwareProfile) -> list[Option]:
@@ -325,12 +329,11 @@ def recommend(profile: HardwareProfile, *, phase1_only: bool = False) -> Recomme
 
 
 def _whisper_model_for_vram(vram_bytes: int) -> str:
-    """Pick the seamless-best Whisper model that comfortably fits. Capped at
-    ``large-v3-turbo`` (not plain large-v3): turbo is within ~1% WER but ~3x
-    faster, which matters more for live dictation — and it keeps recommend()
-    in lockstep with the Engine tab's VRAM-scaled model tiers (the
-    ``_CUDA_LADDER``), so the default and the "Recommended" card never
-    disagree."""
+    """Pick the best-accuracy Whisper model that comfortably fits. High-VRAM
+    cards (>=10 GB) get full ``large-v3`` — most accurate, still ~1 s; mid
+    cards get ``large-v3-turbo`` (within ~1% WER, ~3x faster). Stays in
+    lockstep with the Engine tab's VRAM-scaled tiers (``_CUDA_LADDER``), so
+    the default and the "Recommended" card never disagree."""
     return _CUDA_LADDER[_cuda_ladder_start(vram_bytes / (1024**3))]
 
 
