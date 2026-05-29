@@ -6,8 +6,13 @@ Slumbr follows SemVer: **MAJOR** for breaking changes (config format / behavior)
 
 ## [Unreleased]
 
+## [1.1.0] — 2026-05-29
+
+Post-launch round addressing external review feedback: smarter history, an opt-in to keep it, looser dependency pins, real CI, and an accuracy tier for strong GPUs.
+
 ### Added
 - **Opt-in persistent history.** Settings → History → *Keep history across restarts* saves transcripts to an unencrypted SQLite file at `%APPDATA%\Slumbr\history.db` so they survive a restart. Off by default; turning it back off deletes the file (the ephemeral-by-default privacy story is preserved).
+- **Full `large-v3` accuracy tier on high-VRAM NVIDIA GPUs (≥10 GB).** The most accurate Whisper model, offered as the top Engine pick where it still decodes in ~1 s; mid-range cards keep `large-v3-turbo` as the seamless default.
 - CI now runs the test suite on Windows across Python 3.10–3.12 on every push/PR (was lint-only).
 - README: a "Why Slumbr?" comparison, a vocabulary-hint explainer, and documented transcription-failure behavior; CONTRIBUTING: an installer-build section noting the pinned PyInstaller version.
 

@@ -22,7 +22,7 @@ import os
 import sys
 from pathlib import Path
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 
 
 # PyInstaller windowed builds (console=False) — and pythonw.exe — leave

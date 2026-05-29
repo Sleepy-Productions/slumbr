@@ -5,7 +5,7 @@
 ; Output: packaging\dist-installer\slumbr-setup-cpu.exe
 
 #define AppName "Slumbr"
-#define AppVersion "1.0.0"
+#define AppVersion "1.1.0"
 #define AppPublisher "Sleepy Productions"
 ; Flavor (cpu / nvidia / amd) — passed by the build scripts via /DFlavor=…;
 ; only changes the installer filename, since all flavors are the same app
