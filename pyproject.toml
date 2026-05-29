@@ -34,14 +34,19 @@ dependencies = [
     # models for that always-on streaming path, so it's core too — NOT
     # optional. (It used to arrive only transitively via the faster-whisper
     # extra, which left CPU/base installs unable to fetch any model.)
-    "huggingface_hub",
-    # Audio capture + hotkey + paste — every backend needs them.
-    "sounddevice==0.3.12",
+    # Floor (not exact pin): hugging_face_hub has broken its own API across
+    # minor versions before, so guard the low end; the upper end floats.
+    "huggingface_hub>=0.20",
+    # Audio capture + hotkey + paste — every backend needs them. Floors are the
+    # tested-known-good versions; loosened from exact pins so routine patch
+    # bumps don't force a resolver conflict for installers-from-source.
+    "sounddevice>=0.3.12",
     "numpy",
-    "pynput==1.7.6",
+    "pynput>=1.7.6",
     "pyperclip",
-    # UI stack.
-    "PySide6==6.7.0",
+    # UI stack. PySide6 patches frequently; allow the whole 6.x line, hold the
+    # major (a 7.x could land Qt-API breaks).
+    "PySide6>=6.7,<7",
     "pyqtgraph",
     "pystray",
     "Pillow",
@@ -99,6 +104,8 @@ cpu = [
 
 dev = [
     "pytest",
+    "pytest-mock",  # patch sounddevice/transcriber in the audio-pipeline tests
+    "coverage",     # measure what the suite actually exercises
     "ruff",
 ]
 package = [
