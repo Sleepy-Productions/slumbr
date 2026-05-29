@@ -114,6 +114,10 @@ class SlumbrApp:
         self._restarting = False
         history.clear()
         session_logs.reset()
+        # Apply the saved history-persistence preference. OFF by default keeps
+        # the ephemeral in-memory behavior; ON backfills the live view from the
+        # on-disk store so previous sessions are visible immediately.
+        history.configure(self.config.persist_history)
 
         # ----- Taskbar / window icon = the moon-v2 brand mark in the FIXED
         # monochrome brand color (branding.LOGO_COLOR = white). It does NOT

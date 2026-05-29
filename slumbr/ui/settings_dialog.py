@@ -255,7 +255,7 @@ class SettingsDialog(QDialog):
         self._behavior_tab = BehaviorTab(config)
         self._customization_tab = CustomizationTab(config)
         self._shortcuts_tab = ShortcutsTab(config)
-        self._history_tab = HistoryTab()
+        self._history_tab = HistoryTab(config)
         self._advanced_tab = AdvancedTab(config)
         self._about_tab = AboutTab(config)
 
@@ -280,6 +280,7 @@ class SettingsDialog(QDialog):
         self._behavior_tab.config_changed.connect(self._handle_config_changed)
         self._customization_tab.config_changed.connect(self._handle_config_changed)
         self._advanced_tab.config_changed.connect(self._handle_config_changed)
+        self._history_tab.config_changed.connect(self._handle_config_changed)
         self._shortcuts_tab.hotkey_changed.connect(self._handle_hotkey_changed)
         self._about_tab.quit_requested.connect(self._handle_quit)
         self._about_tab.restart_requested.connect(self._handle_restart)
