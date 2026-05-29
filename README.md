@@ -18,15 +18,25 @@
 
 Tap **Caps Lock** → a popup appears with a live audio meter and a transcript that grows as you talk → tap **Caps Lock** again → your words land at the cursor. No accounts, no cloud, no telemetry.
 
+## Why Slumbr?
+
+If you've used Windows' built-in dictation or a cloud app, here's what's different:
+
+- **vs. Windows Speech Recognition / Voice Typing** — Slumbr runs Whisper-class models, so accuracy on natural speech, punctuation, and technical/jargon words is markedly better. It's fully offline (Voice Typing sends audio to Microsoft), pastes into *any* focused window, and the hotkey is rebindable to any key or chord.
+- **vs. cloud dictation (Otter, Dragon Anywhere, …)** — no account, no subscription, and your voice never leaves your machine. Transcription runs on your own CPU/GPU.
+- **vs. raw Whisper / Whisper Desktop** — Slumbr adds the app layer Whisper lacks: a live streaming preview *while* you talk, tap-to-toggle hotkey, auto-paste at the cursor, per-hardware engine auto-pick, and reverse-PTT to mute calls.
+
+Free, open-source, and local-first.
+
 ## Quick start
 
-1. **Download + run the installer** for your hardware (below) — or install from source. No admin needed.
+1. **Download + run the installer** for your hardware (below) — or install from source. No admin needed (the one exception is the *optional* VB-Cable driver for reverse-PTT — see [Mute other apps](#mute-other-apps-while-dictating-reverse-ptt)).
 2. **First launch sets itself up** — Slumbr detects your hardware and uses the right speech engine automatically.
 3. **Tap Caps Lock, speak, tap again** — your words land wherever your cursor is.
 
 ## Install
 
-Windows 10 / 11 (64-bit), no admin required. Two ways in:
+Windows 10 / 11 (64-bit) — no admin required (except the *optional* VB-Cable driver for reverse-PTT, covered below). Two ways in:
 
 ### Option A — one-click installer (easiest)
 
@@ -87,9 +97,9 @@ cd slumbr
 
 ![Customization tab — pick any accent color and choose the recording-popup style](screenshots/step3-customize.png)
 
-**4 · Everything stays local — and ephemeral.** Your recent transcripts show in History, newest first — copy any one out (or all) and clear them anytime. The list holds your latest 50, in memory only; at the cap it clears and starts fresh. Nothing is written to disk, and the whole list is gone the moment you close Slumbr. Nothing ever leaves your machine.
+**4 · Everything stays local — and ephemeral by default.** Your recent transcripts show in History, newest first — copy any one out (or all) and clear them anytime. The list is a rolling window of your latest 200, in memory only, so it never wipes your recent dictations; close Slumbr and it's gone. Want them to survive a restart? Flip **Keep history across restarts** (off by default) and they're saved to a local file you can delete anytime. Nothing ever leaves your machine.
 
-![History tab — your recent transcripts with timestamps; in-memory only, capped at 50, and gone when you close Slumbr](screenshots/step4-history.png)
+![History tab — your recent transcripts with timestamps; in-memory by default and gone when you close Slumbr, with an opt-in to keep them across restarts](screenshots/step4-history.png)
 
 ### Two engines under the hood
 
@@ -112,11 +122,13 @@ Models cache to `%APPDATA%\Slumbr\models` on first download — after that, Slum
 - **Live partials while you speak.** Moonshine + Silero VAD + online punctuation give the popup smooth word-by-word text that grows monotonically.
 - **Tap-to-toggle Caps Lock hotkey.** No press-and-hold, no wake-word. The OS-level Caps Lock state is never flipped while Slumbr is running. Rebind to any key or chord in Settings → Shortcuts.
 - **Auto-paste at the cursor.** Works in Notepad, browsers, chat apps, terminals (Ctrl+Shift+V mode), and Electron IDEs like VS Code.
-- **Copy from history (in-memory, ephemeral).** A dictation that landed with no field focused still shows in History — double-click, right-click, or Ctrl+C to copy any transcript out, or "Copy all". History keeps your latest 50 in memory only; at the cap it clears and starts fresh, and the whole list is gone when you close Slumbr. Nothing is written to disk.
+- **Copy from history (in-memory, ephemeral by default).** A dictation that landed with no field focused still shows in History — double-click, right-click, or Ctrl+C to copy any transcript out, or "Copy all". History is a rolling list of your latest 200 in memory only — past the cap the oldest drops off (it never wipes), and the whole list is gone when you close Slumbr. Opt into **Keep history across restarts** to persist it to a local file instead.
 - **Mute other apps while dictating.** One-click VB-Cable install + auto-config → call apps hear silence during dictation while Slumbr keeps capturing. Works in Discord / Zoom / Teams / OBS / browser calls. (Discord users can alternatively use Discord's own Push-to-Mute keybind — no cable needed.)
 - **Customizable accent.** One color recolors the whole app — audio visualizer, "✓ Sent" flash, settings UI, tray icon — live, and persists across restarts. (Neutral by default; the brand mark stays monochrome.)
 - **System tray + sidebar Settings.** No hub window — the tray is the only persistent surface. Settings uses a clean left-sidebar nav grouped into **Setup** (Engine · Voice · Shortcuts), **Preferences** (Behavior · Customization · Advanced), and **Info** (History · About).
-- **Tune everything.** Input device, language, paste method, hotkey, backend, model size, compute precision — plus a vocabulary hint and clipboard / auto-send options under Advanced.
+- **Vocabulary hint.** Names, jargon, or slang Slumbr keeps mishearing? List them in Settings → Advanced → Vocabulary (up to ~200 tokens). It biases the Whisper backends toward those words, so "PySide6" or "sherpa-onnx" come out right instead of a phonetic guess.
+- **Optional persistent history.** History is in-memory and ephemeral by default. Flip **Keep history across restarts** in Settings → History to save transcripts to a local file (`%APPDATA%\Slumbr\history.db`) so they survive a restart; turning it back off deletes that file.
+- **Tune everything.** Input device, language, paste method, hotkey, backend, model size, compute precision — plus clipboard / auto-send options under Advanced.
 
 ## Requirements
 
@@ -149,7 +161,9 @@ Now Caps Lock silences your mic in every call app while Slumbr keeps transcribin
 
 ## Privacy
 
-Slumbr never makes a network call at runtime. Models download once from Hugging Face on first launch, cached at `%APPDATA%\Slumbr\models`. Audio buffers live in RAM only and are discarded after transcription. **Your transcripts are never written to disk** — History is in-memory only (your latest 50), clears at the cap, and is gone the moment you close Slumbr. No history file, no session logs, no crash dumps of your dictations. The rotating debug log at `%APPDATA%\Slumbr\logs\slumbr.log` records events and errors for troubleshooting but **not** transcript text. No accounts, no telemetry, no analytics.
+Slumbr never makes a network call at runtime. Models download once from Hugging Face on first launch, cached at `%APPDATA%\Slumbr\models`. Audio buffers live in RAM only and are discarded after transcription. **By default your transcripts are never written to disk** — History is in-memory only (a rolling list of your latest 200) and is gone the moment you close Slumbr. No session logs, no crash dumps of your dictations. The rotating debug log at `%APPDATA%\Slumbr\logs\slumbr.log` records events and errors for troubleshooting but **not** transcript text. No accounts, no telemetry, no analytics.
+
+**Optional persistence is opt-in.** If you turn on *Keep history across restarts* (Settings → History), transcripts are saved to an **unencrypted** SQLite file at `%APPDATA%\Slumbr\history.db` so they survive a restart. It stays off until you choose it, and turning it back off deletes the file.
 
 ## Troubleshooting
 
@@ -161,6 +175,9 @@ Most Windows apps — including VS Code's terminal and Windows Terminal — acce
 
 **First utterance is slow.**
 Warm-up runs at startup; the first *real* transcription still pays a small one-time decoder cost. Subsequent utterances settle into the steady-state range.
+
+**A dictation didn't paste / seemed to fail.**
+If transcription errors out, Slumbr flashes the popup red and shows a tray notification — it never silently drops your words without telling you. That attempt's audio is discarded (nothing is retried automatically); just tap your hotkey and dictate again. Repeated failures usually mean the engine model didn't finish downloading — check `%APPDATA%\Slumbr\logs\slumbr.log`.
 
 **Mic doesn't show up / wrong device picked.**
 Settings → Voice → Input device. The list shows your **real mics only** — virtual cables, Windows router aliases (Sound Mapper, Primary Sound Capture Driver), and loopback inputs (Stereo Mix, Line In) are filtered out, and duplicates across audio APIs are collapsed. Slumbr stores names (not numeric indices) so USB-mic hot-plug survives.
