@@ -15,6 +15,7 @@ from PySide6.QtCore import QRect, QSize, Qt, Signal
 from PySide6.QtGui import QColor, QCursor, QFont, QFontMetrics, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
+    QCheckBox,
     QHBoxLayout,
     QLabel,
     QListWidget,
@@ -29,8 +30,9 @@ from PySide6.QtWidgets import (
 )
 
 from ... import history
+from ...config import SlumbrConfig
 from ...theme import BG_PANEL, BG_PANEL_HI, BORDER, TEXT_PRIMARY, TEXT_SECONDARY
-from ._widgets import heading, subheading, tag
+from ._widgets import field_hint, heading, subheading, tag
 
 # Per-item data roles: the delegate paints the timestamp + transcript in two
 # different styles, so we stash them separately instead of one display string.
@@ -92,9 +94,11 @@ class _HistoryDelegate(QStyledItemDelegate):
 
 class HistoryTab(QWidget):
     history_cleared = Signal()
+    config_changed = Signal()
 
-    def __init__(self) -> None:
+    def __init__(self, cfg: SlumbrConfig) -> None:
         super().__init__()
+        self._cfg = cfg
         layout = QVBoxLayout(self)
         layout.setContentsMargins(48, 40, 48, 40)
         layout.setSpacing(20)
@@ -116,11 +120,26 @@ class HistoryTab(QWidget):
 
         layout.addWidget(
             subheading(
-                "Your dictations this session, newest first. At "
-                f"{getattr(history, 'MAX_ENTRIES', 50)} the list clears and starts "
-                "fresh — nothing is saved to disk, and it's gone when you close "
-                "Slumbr. Double-click, right-click, or select + Ctrl+C to copy a "
-                "line; Copy all grabs them together."
+                "Your most recent dictations, newest first — a rolling list of "
+                f"the latest {getattr(history, 'MAX_ENTRIES', 200)}. Double-click, "
+                "right-click, or select + Ctrl+C to copy a line; Copy all grabs "
+                "them together."
+            )
+        )
+
+        # Opt-in persistence. Off by default — the privacy story is in-memory /
+        # ephemeral; turning this on saves transcripts to a local file so they
+        # survive restarts (and turning it back off deletes that file).
+        self._persist_cb = QCheckBox("Keep history across restarts")
+        self._persist_cb.setChecked(bool(getattr(self._cfg, "persist_history", False)))
+        self._persist_cb.toggled.connect(self._on_persist_toggled)
+        layout.addWidget(self._persist_cb)
+        layout.addWidget(
+            field_hint(
+                "Off by default: history lives in memory and is gone when you "
+                "close Slumbr. On: transcripts are saved to an unencrypted file "
+                "at %APPDATA%\\Slumbr\\history.db so they persist — turning this "
+                "back off deletes that file."
             )
         )
 
@@ -184,6 +203,15 @@ class HistoryTab(QWidget):
         history.clear()
         self.refresh()
         self.history_cleared.emit()
+
+    def _on_persist_toggled(self, checked: bool) -> None:
+        """Flip on-disk persistence. Applies immediately (configure backfills the
+        live view from the store when turning on, deletes the file when turning
+        off), then saves the preference + refreshes the list."""
+        self._cfg.persist_history = bool(checked)
+        history.configure(self._cfg.persist_history)
+        self.refresh()
+        self.config_changed.emit()
 
     # ------------------------------------------------------------- copy
     def _copy_text(self, text: str) -> None:

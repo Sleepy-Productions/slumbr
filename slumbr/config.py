@@ -136,6 +136,13 @@ class SlumbrConfig:
     # content precedes it — so a genuine short "thank you" is left alone.
     strip_trailing_filler: bool = True
 
+    # ----- History persistence -----
+    # OFF by default — history is in-memory and ephemeral (the privacy default).
+    # When True, transcripts are ALSO written to an unencrypted SQLite file at
+    # %APPDATA%\Slumbr\history.db so they survive restarts; turning it back off
+    # deletes that file. See slumbr/history.py + history_store.py.
+    persist_history: bool = False
+
     # ----- Streaming engine experiment toggle -----
     streaming_visual_leading_edge: bool = False
 
