@@ -1,0 +1,33 @@
+name: Tests
+
+on:
+  push:
+    branches: [main, "release/**"]
+  pull_request:
+    branches: [main, "release/**"]
+
+jobs:
+  pytest:
+    # Slumbr is Windows-only (WASAPI, Win32 hooks, pywin32), so the suite must
+    # run on a Windows runner — Linux can't import half the modules.
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+    env:
+      # Qt has no display on CI; the offscreen platform lets PySide6 import and
+      # widgets construct without a real screen.
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+      - name: Install (base + dev extras)
+        # Base runtime only — the heavy per-vendor GPU backends (nvidia/amd/intel)
+        # are NOT installed; the suite covers orchestration with them mocked out.
+        run: pip install -e ".[dev]"
+      - name: Run tests
+        run: pytest -q
