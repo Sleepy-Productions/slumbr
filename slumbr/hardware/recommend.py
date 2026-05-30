@@ -17,6 +17,8 @@ and shows the result to the user with a "Show alternatives" expander.
 
 from __future__ import annotations
 
+import sys
+
 from dataclasses import dataclass
 
 from ..config import BackendConfig
@@ -125,7 +127,11 @@ def backend_options(profile: HardwareProfile) -> list[Option]:
     # opt-in accuracy upgrade (real Whisper on CPU, no GPU required).
     return [
         Option("recommended", "moonshine", "Moonshine · CPU — snappy, fully local."),
-        Option("balanced", "cpu_ct2", "Faster-Whisper · CPU — real Whisper accuracy, slower."),
+        # cpu_ct2 crashes in packaged builds (native ctranslate2 CPU init);
+        # only offer it from source where it works.
+        *([] if getattr(sys, "frozen", False) else [
+            Option("balanced", "cpu_ct2", "Faster-Whisper · CPU — real Whisper accuracy, slower."),
+        ]),
     ]
 
 

@@ -8,6 +8,7 @@ in ``slumbr/stt/backends/`` and they become reachable everywhere.
 from __future__ import annotations
 
 import logging
+import sys
 from typing import TYPE_CHECKING
 
 from .protocol import Transcriber
@@ -31,6 +32,16 @@ def build_transcriber(
     so the engine warms up with the user's actual config.
     """
     name = cfg.name
+    # cpu_ct2 (faster-whisper on CPU) access-violates natively on model init
+    # in FROZEN builds (ctranslate2 CPU backend, post-Qt) and a native crash
+    # cannot be caught. Moonshine is the bundled CPU engine and the seamless
+    # default, so transparently redirect rather than hand users a hard crash.
+    # Source/dev runs are unaffected (cpu_ct2 works there).
+    if name == "cpu_ct2" and getattr(sys, "frozen", False):
+        log.warning("cpu_ct2 is unavailable in packaged builds; using Moonshine instead")
+        from ..config import BackendConfig  # noqa: PLC0415
+        cfg = BackendConfig(name="moonshine", model="moonshine-base-en-int8")
+        name = cfg.name
     log.info("building transcriber: backend=%s model=%s", name, cfg.model)
 
     if name in ("cuda_ct2", "cpu_ct2"):

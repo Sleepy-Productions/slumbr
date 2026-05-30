@@ -286,13 +286,6 @@ def _preload_cuda() -> None:
         # device query is enough to load + init the CUDA runtime) sidesteps it.
         ndev = ctranslate2.get_cuda_device_count()
         _boot_log.info("ctranslate2 preloaded OK; cuda_device_count=%s", ndev)
-        # Same idea for the CPU backend: the cpu_ct2 path builds a
-        # ``ctranslate2.models.Whisper(device="cpu")`` on a worker thread
-        # AFTER Qt loads, and the CPU backend's lazy first-touch init then
-        # access-violates (frozen only). Querying the CPU compute types here
-        # forces that init up front, pre-Qt, on the main thread. Cheap; the
-        # CUDA query above does NOT cover the CPU backend.
-        ctranslate2.get_supported_compute_types("cpu")
     except Exception as e:  # noqa: BLE001
         _boot_log.warning("ctranslate2 preload failed (non-fatal): %s", e)
 
