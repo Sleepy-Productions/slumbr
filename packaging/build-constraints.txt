@@ -1,0 +1,15 @@
+# Exact dependency versions for FROZEN (PyInstaller) release builds.
+#
+# WHY THIS EXISTS: pyproject.toml uses loosened >= floors (correct for pip /
+# source installs). But frozen release bundles MUST be built against the exact
+# versions Slumbr was tested with — newer PySide6 / sounddevice / pynput majors
+# SEGFAULT the frozen bundle on launch (real config), even though they import
+# fine from source. (Learned the hard way: 1.1.0 first shipped built against
+# PySide6 6.11 / sounddevice 0.5.5 / pynput 1.8 and crashed before "ready".)
+#
+# Use with: pip install -c packaging/build-constraints.txt ...
+# Bump these ONLY after verifying a frozen build reaches "ready" and dictates.
+PySide6==6.7.0
+sounddevice==0.3.12
+pynput==1.7.6
+pyinstaller==6.8.0
