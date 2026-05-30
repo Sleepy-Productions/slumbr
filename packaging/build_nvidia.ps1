@@ -24,11 +24,14 @@ if ($FreshVenv) {
     python -m venv .venv-nvidia
     $py = ".\.venv-nvidia\Scripts\python.exe"
     & $py -m pip install --upgrade pip
-    & $py -m pip install ".[cuda]"
-    & $py -m pip install pyinstaller
+    # -c build-constraints.txt pins PySide6/sounddevice/pynput/pyinstaller to the
+    # EXACT tested versions — newer majors segfault the frozen bundle (see
+    # build_cpu.ps1). DO NOT remove.
+    & $py -m pip install -c packaging\build-constraints.txt ".[cuda]"
+    & $py -m pip install -c packaging\build-constraints.txt pyinstaller
 } else {
     $py = ".\.venv\Scripts\python.exe"   # dev venv already has [cuda]
-    & $py -m pip install pyinstaller
+    & $py -m pip install -c packaging\build-constraints.txt pyinstaller
 }
 
 Write-Host "==> Cleaning previous build..."

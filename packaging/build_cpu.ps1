@@ -22,17 +22,22 @@ if (-not $UseCurrentVenv) {
     python -m venv .venv-cpu
     $py = ".\.venv-cpu\Scripts\python.exe"
     & $py -m pip install --upgrade pip
+    # -c build-constraints.txt PINS PySide6/sounddevice/pynput/pyinstaller to the
+    # EXACT tested versions for the FROZEN bundle. pyproject's loosened >= floors
+    # are correct for source/pip, but newer majors (PySide6 6.11, sounddevice
+    # 0.5.x, pynput 1.8) SEGFAULT the frozen exe on launch. DO NOT remove this.
+    $constraints = "packaging\build-constraints.txt"
     # Base deps (sherpa-onnx Moonshine + huggingface_hub + Qt). Then add
     # faster-whisper for the cpu_ct2 backend WITHOUT the nvidia-* CUDA wheels
     # (those live in the [cuda] extra) so the bundle stays CPU-sized, plus CPU
     # onnxruntime so we never pull the DirectML build.
-    & $py -m pip install .
-    & $py -m pip install "faster-whisper==1.2.1"
-    & $py -m pip install onnxruntime    # CPU provider, not -directml
-    & $py -m pip install pyinstaller
+    & $py -m pip install -c $constraints .
+    & $py -m pip install -c $constraints "faster-whisper==1.2.1"
+    & $py -m pip install -c $constraints onnxruntime    # CPU provider, not -directml
+    & $py -m pip install -c $constraints pyinstaller
 } else {
     $py = ".\.venv\Scripts\python.exe"
-    & $py -m pip install pyinstaller
+    & $py -m pip install -c packaging\build-constraints.txt pyinstaller
 }
 
 Write-Host "==> Cleaning previous build..."
