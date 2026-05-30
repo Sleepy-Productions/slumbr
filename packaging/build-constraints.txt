@@ -9,7 +9,18 @@
 #
 # Use with: pip install -c packaging/build-constraints.txt ...
 # Bump these ONLY after verifying a frozen build reaches "ready" and dictates.
+#
+# These versions are the ones the working dev .venv runs (reaches "ready" from
+# source). The frozen bundle MUST match them. Pitfalls hit the hard way on 1.1.0:
+#   - PySide6 6.11 / shiboken6 mismatch -> "shiboken6.Shiboken has no attribute
+#     replaceModuleDict" (newer PySide6 __init__ welded to old shiboken).
+#   - numpy 2.4.x -> "cannot load module more than once" / numpy._core._exceptions
+#     missing from the bundle. numpy 2.2.6 collects cleanly.
+#   - onnxruntime newer majors are C-extension-heavy; pin to the tested 1.20.1.
 PySide6==6.7.0
+shiboken6==6.7.0
 sounddevice==0.3.12
 pynput==1.7.6
+numpy==2.2.6
+onnxruntime==1.20.1
 pyinstaller==6.8.0
