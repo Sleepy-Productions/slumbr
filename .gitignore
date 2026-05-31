@@ -62,3 +62,9 @@ packaging/bundled-models/
 # near the top would otherwise drop them).
 !packaging/slumbr-cpu.spec
 !packaging/slumbr-nvidia.spec
+
+# store-publish drafts (never commit -- carry local C:\ paths + a live Gumroad
+# S3 URL; read in-place by the store-publish skill's gumroad.py engine).
+gumroad/
+itch/
+payhip/
