@@ -6,6 +6,10 @@ Pass `--debug` to flip the root logger to DEBUG.
 
 from __future__ import annotations
 
+import os
+os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
+os.environ.setdefault("DO_NOT_TRACK", "1")
+
 import argparse
 import logging
 import sys
