@@ -10,6 +10,7 @@ first gives it its parent package, so those imports resolve.
 import sys
 
 from slumbr.__main__ import main
+import sleepy_errlog as errlog  # auto-wired by project-level; wrap calls: with errlog.guard("slumbr", source=..., endpoint=url):
 
 if __name__ == "__main__":
     sys.exit(main())
