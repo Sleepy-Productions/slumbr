@@ -61,18 +61,21 @@ def _editable_root() -> Path | None:
     return None
 
 
-def _install_target(extras: list[str]) -> str:
-    """Build the ``pip install`` target string.
+def _install_target(extras: list[str]) -> list[str]:
+    """Build the ``pip install`` target argument list.
 
     Examples:
-      - editable + extras → ``"-e .[nvidia]"`` (returned as two args)
-      - wheel + extras    → ``"slumbr[nvidia]"``
+      - editable + extras → ``["-e", "/path/to/repo[nvidia]"]``
+      - wheel + extras    → ``["slumbr[nvidia]"]``
+
+    Returns a list of args (never a string) so paths with spaces are not
+    mangled by shell splitting.
     """
     extras_token = f"[{','.join(extras)}]" if extras else ""
     root = _editable_root()
     if root is not None:
-        return f"-e {root}{extras_token}"
-    return f"slumbr{extras_token}"
+        return ["-e", f"{root}{extras_token}"]
+    return [f"slumbr{extras_token}"]
 
 
 class InstallWorker(QObject):
@@ -90,7 +93,7 @@ class InstallWorker(QObject):
 
     def run(self) -> None:
         target = _install_target(self._extras)
-        cmd = [sys.executable, "-m", "pip", "install", "--upgrade"] + target.split()
+        cmd = [sys.executable, "-m", "pip", "install", "--upgrade"] + target
         # `--upgrade` is important: if the user re-runs the wizard to
         # switch from cpu→nvidia mid-life, we want the new wheels even
         # if a stale version of slumbr is already installed.
