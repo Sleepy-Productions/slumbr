@@ -71,3 +71,36 @@ def test_collapses_runaway_repetition():
 def test_spares_natural_short_repetition():
     # "no no no" is emphasis, not a runaway loop — must survive.
     assert polish("no no no that is wrong").lower().startswith("no no no")
+
+
+# ----- boundary regressions for the repetition-collapse thresholds. These pin
+# the tuned constants (_REPEAT_MIN_REPS_WORD=6, _REPEAT_MIN_REPS_PHRASE=4,
+# _REPEAT_MIN_WORDS=8) so a future "cleanup" can't silently start eating natural
+# speech or stop catching real ASR loops.
+
+
+def test_single_word_loop_collapses_at_six_reps():
+    # 6 consecutive identical words IS a runaway loop -> collapse to one.
+    out = polish(" ".join(["you"] * 6) + " did the thing").lower()
+    assert out == "you did the thing."
+
+
+def test_single_word_repeated_five_times_is_spared():
+    # 5 reps stays under the single-word threshold -> left as emphasis.
+    out = polish("you you you you you really mean it here ok").lower()
+    assert out.count("you") == 5
+
+
+def test_phrase_loop_collapses_at_four_reps():
+    out = polish(" ".join(["stop it now"] * 4)).lower()
+    assert out == "stop it now."
+
+
+def test_phrase_repeated_three_times_is_spared():
+    out = polish(" ".join(["stop it now"] * 3)).lower()
+    assert out.count("stop it now") == 3
+
+
+def test_text_under_min_words_is_never_collapsed():
+    # Below _REPEAT_MIN_WORDS (8) the text is too short to be a loop.
+    assert polish("hi hi hi hi hi hi").lower() == "hi hi hi hi hi hi."
