@@ -68,3 +68,6 @@ packaging/bundled-models/
 gumroad/
 itch/
 payhip/
+
+# sleepy_errlog local-only output (privacy-golden-standard)
+.errlog.jsonl
