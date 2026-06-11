@@ -44,17 +44,49 @@ def configure(persist: bool) -> None:
     """Set whether transcripts persist to disk. Call at startup with the saved
     config, and whenever the user toggles the setting.
 
-    Turning ON backfills the live view from the on-disk store (so past sessions
-    show immediately). Turning OFF deletes the store file, leaving no trace."""
+    Turning ON: any entries already in memory are written to the store first,
+    then the full on-disk history is loaded so past sessions show immediately.
+    This prevents losing in-memory transcripts when the user enables persistence
+    mid-session.
+
+    Turning OFF: deletes the store file, leaving no trace."""
     global _persist
     was = _persist
     _persist = bool(persist)
     if _persist and not was:
         from . import history_store
 
+        # Snapshot current in-memory entries before loading from disk so we
+        # can write them back after merging (fix: mid-session enable must not
+        # discard entries the user has already dictated this session).
+        current_entries = list(_entries)
+
+        # Load what's already persisted.
         rows = history_store.load_recent(MAX_ENTRIES)
+        persisted = [HistoryEntry(text=t, ts=ts) for t, ts in rows]
+
+        # Merge: combine persisted + current in-memory, dedupe by (text, ts),
+        # keep chronological order, truncate to MAX_ENTRIES newest.
+        seen: set[tuple[str, float]] = set()
+        merged: list[HistoryEntry] = []
+        for e in persisted + current_entries:
+            key = (e.text, e.ts)
+            if key not in seen:
+                seen.add(key)
+                merged.append(e)
+        merged.sort(key=lambda e: e.ts)
+        if len(merged) > MAX_ENTRIES:
+            merged = merged[-MAX_ENTRIES:]
+
         _entries.clear()
-        _entries.extend(HistoryEntry(text=t, ts=ts) for t, ts in rows)
+        _entries.extend(merged)
+
+        # Persist any in-memory entries that were not already on disk.
+        persisted_keys = {(t, ts) for t, ts in rows}
+        for e in current_entries:
+            if (e.text, e.ts) not in persisted_keys:
+                history_store.add(e.text, e.ts)
+
     elif was and not _persist:
         from . import history_store
 
@@ -90,9 +122,25 @@ def append(text: str) -> None:
         history_store.add(entry.text, entry.ts)
 
 
+def clear_memory() -> None:
+    """Empty only the in-memory list, leaving the on-disk store intact.
+
+    Use this on shutdown/restart so a user who opted into persistent history
+    doesn't lose their stored transcripts just because Slumbr exited cleanly.
+    The on-disk store is the user's data; clearing memory is an implementation
+    detail of process lifecycle, not a user action.
+    """
+    _entries.clear()
+
+
 def clear() -> None:
-    """Empty the history immediately (Settings → Clear history, and on quit).
-    When persistence is on, the on-disk store is wiped too."""
+    """Empty the history immediately (Settings → Clear history button).
+    When persistence is on, the on-disk store is wiped too.
+
+    This is the full wipe triggered by explicit user action. Do NOT call this
+    on normal shutdown/restart — use ``clear_memory()`` instead so the
+    persisted store survives.
+    """
     _entries.clear()
     if _persist:
         from . import history_store

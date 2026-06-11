@@ -10,7 +10,13 @@ first gives it its parent package, so those imports resolve.
 import sys
 
 from slumbr.__main__ import main
-import sleepy_errlog as errlog  # auto-wired by project-level; wrap calls: with errlog.guard("slumbr", source=..., endpoint=url):
+
+# sleepy_errlog is local-only tooling (gitignored, never shipped); builds from a
+# clean clone must not require it.
+try:
+    import sleepy_errlog as errlog  # wrap calls: with errlog.guard("slumbr", source=..., endpoint=url):
+except ImportError:
+    errlog = None
 
 if __name__ == "__main__":
     sys.exit(main())

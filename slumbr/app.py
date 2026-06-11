@@ -112,7 +112,7 @@ class SlumbrApp:
         # but a possibly-stale single-instance lock from an unclean prior exit.
         # Start fresh; ``begin()`` drops this session's marker after the wizard.
         self._restarting = False
-        history.clear()
+        history.clear_memory()  # start with empty in-memory list; configure() loads disk if opted in
         session_logs.reset()
         # Apply the saved history-persistence preference. OFF by default keeps
         # the ephemeral in-memory behavior; ON backfills the live view from the
@@ -673,6 +673,16 @@ class SlumbrApp:
             self._try_open_mic_mirror()
             return
 
+        # The stream may have closed itself inside push() after a PortAudioError
+        # (e.g. VB-Cable uninstalled or default device switched). In that case
+        # the handle is non-None but is_running is False — reopen it.
+        if not self.mic_mirror.is_running:
+            log.info("mic_mirror stream died (device lost?); reopening")
+            self.mic_mirror.stop()  # idempotent cleanup
+            self.mic_mirror = None
+            self._try_open_mic_mirror()
+            return
+
         # Already running — check whether the user picked a different
         # device. Compare by name (MicMirror stores the original name
         # passed in; the resolved int index isn't comparable to config).
@@ -741,7 +751,7 @@ class SlumbrApp:
         # flag makes _on_quit skip its own session cleanup (the new instance
         # owns the session from here).
         session_logs.end()
-        history.clear()
+        history.clear_memory()  # in-memory only — keep the persisted store
         self._restarting = True
         relaunch_slumbr()
         self._on_quit()
@@ -765,6 +775,16 @@ class SlumbrApp:
         if self.recorder.is_recording():
             self.recorder.stop()
         self.recorder.close()
+        # Wait for any in-flight TranscribeWorker to finish before closing the
+        # backend. Closing the backend (which nulls the model handle) while the
+        # worker is mid-transcribe is a native use-after-free that can silently
+        # crash CTranslate2 / ONNX Runtime instead of raising a clean exception.
+        # We bound the wait to 5 s so a hung/stuck decode doesn't freeze quit.
+        if self._worker is not None and self._worker.isRunning():
+            log.info("quit: waiting for in-flight transcription worker (max 5 s)")
+            finished = self._worker.wait(5000)  # ms
+            if not finished:
+                log.warning("quit: worker did not finish in time; proceeding anyway")
         try:
             self.streaming_engine.end_session()
         except Exception:  # noqa: BLE001
@@ -782,7 +802,7 @@ class SlumbrApp:
         # handoff in _on_restart already did it and owns the next session.
         if not getattr(self, "_restarting", False):
             session_logs.end()
-            history.clear()
+            history.clear_memory()  # in-memory only — keep the persisted store
         self.tray.stop()
         self.qapp.quit()
 

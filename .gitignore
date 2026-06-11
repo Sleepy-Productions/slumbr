@@ -63,11 +63,13 @@ packaging/bundled-models/
 !packaging/slumbr-cpu.spec
 !packaging/slumbr-nvidia.spec
 
-# store-publish drafts (never commit -- carry local C:\ paths + a live Gumroad
-# S3 URL; read in-place by the store-publish skill's gumroad.py engine).
+# store-publish drafts
 gumroad/
 itch/
 payhip/
+
+# Private internal tooling — not part of Slumbr's public API
+sleepy_errlog.py
 
 # sleepy_errlog local-only output (privacy-golden-standard)
 .errlog.jsonl
