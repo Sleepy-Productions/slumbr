@@ -659,39 +659,51 @@ class SlumbrApp:
                                  explicitly picking a device)
           - enabled → disabled : stop + drop the current mirror
           - device changed     : stop the old mirror, open a new one
+
+        The swap is guarded by ``_swap_lock`` so that a device change applied
+        while recording is in progress does not let ``_reset_to_idle()`` call
+        ``set_muted(False)`` on a handle that is mid-teardown.  If the lock is
+        already held (hotkey fired during the config-apply path), we log and
+        defer — the user can close + reopen Settings to retry.
         """
-        if not self.config.mic_routing_enabled:
-            if self.mic_mirror is not None:
+        if not self._swap_lock.acquire(blocking=False):
+            log.info("mic mirror reconcile deferred — toggle in progress")
+            return
+        try:
+            if not self.config.mic_routing_enabled:
+                if self.mic_mirror is not None:
+                    self.mic_mirror.stop()
+                    self.mic_mirror = None
+                return
+
+            # Routing is enabled. If we have no mirror yet (just-enabled or
+            # crashed earlier), let ``_try_open_mic_mirror`` handle the
+            # auto-pick + open path.
+            if self.mic_mirror is None:
+                self._try_open_mic_mirror()
+                return
+
+            # The stream may have closed itself inside push() after a PortAudioError
+            # (e.g. VB-Cable uninstalled or default device switched). In that case
+            # the handle is non-None but is_running is False — reopen it.
+            if not self.mic_mirror.is_running:
+                log.info("mic_mirror stream died (device lost?); reopening")
+                self.mic_mirror.stop()  # idempotent cleanup
+                self.mic_mirror = None
+                self._try_open_mic_mirror()
+                return
+
+            # Already running — check whether the user picked a different
+            # device. Compare by name (MicMirror stores the original name
+            # passed in; the resolved int index isn't comparable to config).
+            cur_name = getattr(self.mic_mirror, "_device_name", "")
+            target = self.config.mic_routing_device_name
+            if target and cur_name != target:
                 self.mic_mirror.stop()
                 self.mic_mirror = None
-            return
-
-        # Routing is enabled. If we have no mirror yet (just-enabled or
-        # crashed earlier), let ``_try_open_mic_mirror`` handle the
-        # auto-pick + open path.
-        if self.mic_mirror is None:
-            self._try_open_mic_mirror()
-            return
-
-        # The stream may have closed itself inside push() after a PortAudioError
-        # (e.g. VB-Cable uninstalled or default device switched). In that case
-        # the handle is non-None but is_running is False — reopen it.
-        if not self.mic_mirror.is_running:
-            log.info("mic_mirror stream died (device lost?); reopening")
-            self.mic_mirror.stop()  # idempotent cleanup
-            self.mic_mirror = None
-            self._try_open_mic_mirror()
-            return
-
-        # Already running — check whether the user picked a different
-        # device. Compare by name (MicMirror stores the original name
-        # passed in; the resolved int index isn't comparable to config).
-        cur_name = getattr(self.mic_mirror, "_device_name", "")
-        target = self.config.mic_routing_device_name
-        if target and cur_name != target:
-            self.mic_mirror.stop()
-            self.mic_mirror = None
-            self._try_open_mic_mirror()
+                self._try_open_mic_mirror()
+        finally:
+            self._swap_lock.release()
 
     def _on_hotkey_changed(self, vks: list[int]) -> None:
         if not vks:

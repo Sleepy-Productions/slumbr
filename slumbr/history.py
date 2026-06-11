@@ -17,6 +17,7 @@ on-disk store too, when persistence is on).
 
 from __future__ import annotations
 
+import threading
 import time
 from dataclasses import dataclass
 
@@ -32,6 +33,13 @@ _entries: list[HistoryEntry] = []
 # Whether transcripts are also persisted to disk. OFF by default; flipped by
 # ``configure()`` from the saved config / the Settings toggle.
 _persist = False
+
+# Guards all mutations of ``_entries`` and ``_persist``.  Everything is nominally
+# Qt-main-thread, but the startup ``configure()`` call fires before the event loop
+# and could theoretically race a threading bootstrap that triggers ``append()``.
+# The lock is lightweight (uncontended = single CAS) and makes the contract
+# explicit: any thread may call ``append()`` safely.
+_lock = threading.Lock()
 
 
 @dataclass
@@ -51,56 +59,62 @@ def configure(persist: bool) -> None:
 
     Turning OFF: deletes the store file, leaving no trace."""
     global _persist
-    was = _persist
-    _persist = bool(persist)
-    if _persist and not was:
-        from . import history_store
+    # Take the lock before inspecting or mutating _entries/_persist so that a
+    # concurrent append() (e.g. from a threading bootstrap firing before the Qt
+    # event loop) cannot land between the snapshot and the _entries.clear().
+    with _lock:
+        was = _persist
+        _persist = bool(persist)
+        if _persist and not was:
+            from . import history_store
 
-        # Snapshot current in-memory entries before loading from disk so we
-        # can write them back after merging (fix: mid-session enable must not
-        # discard entries the user has already dictated this session).
-        current_entries = list(_entries)
+            # Snapshot current in-memory entries before loading from disk so we
+            # can write them back after merging (fix: mid-session enable must not
+            # discard entries the user has already dictated this session).
+            current_entries = list(_entries)
 
-        # Load what's already persisted.
-        rows = history_store.load_recent(MAX_ENTRIES)
-        persisted = [HistoryEntry(text=t, ts=ts) for t, ts in rows]
+            # Load what's already persisted.
+            rows = history_store.load_recent(MAX_ENTRIES)
+            persisted = [HistoryEntry(text=t, ts=ts) for t, ts in rows]
 
-        # Merge: combine persisted + current in-memory, dedupe by (text, ts),
-        # keep chronological order, truncate to MAX_ENTRIES newest.
-        seen: set[tuple[str, float]] = set()
-        merged: list[HistoryEntry] = []
-        for e in persisted + current_entries:
-            key = (e.text, e.ts)
-            if key not in seen:
-                seen.add(key)
-                merged.append(e)
-        merged.sort(key=lambda e: e.ts)
-        if len(merged) > MAX_ENTRIES:
-            merged = merged[-MAX_ENTRIES:]
+            # Merge: combine persisted + current in-memory, dedupe by (text, ts),
+            # keep chronological order, truncate to MAX_ENTRIES newest.
+            seen: set[tuple[str, float]] = set()
+            merged: list[HistoryEntry] = []
+            for e in persisted + current_entries:
+                key = (e.text, e.ts)
+                if key not in seen:
+                    seen.add(key)
+                    merged.append(e)
+            merged.sort(key=lambda e: e.ts)
+            if len(merged) > MAX_ENTRIES:
+                merged = merged[-MAX_ENTRIES:]
 
-        _entries.clear()
-        _entries.extend(merged)
+            _entries.clear()
+            _entries.extend(merged)
 
-        # Persist any in-memory entries that were not already on disk.
-        persisted_keys = {(t, ts) for t, ts in rows}
-        for e in current_entries:
-            if (e.text, e.ts) not in persisted_keys:
-                history_store.add(e.text, e.ts)
+            # Persist any in-memory entries that were not already on disk.
+            persisted_keys = {(t, ts) for t, ts in rows}
+            for e in current_entries:
+                if (e.text, e.ts) not in persisted_keys:
+                    history_store.add(e.text, e.ts)
 
-    elif was and not _persist:
-        from . import history_store
+        elif was and not _persist:
+            from . import history_store
 
-        history_store.delete_file()
+            history_store.delete_file()
 
 
 def load_all() -> list[HistoryEntry]:
     """Snapshot of this session's entries, oldest-first."""
-    return list(_entries)
+    with _lock:
+        return list(_entries)
 
 
 def latest() -> str:
     """The most recent transcript, or empty string if none."""
-    return _entries[-1].text if _entries else ""
+    with _lock:
+        return _entries[-1].text if _entries else ""
 
 
 def append(text: str) -> None:
@@ -113,10 +127,12 @@ def append(text: str) -> None:
     if not text:
         return
     entry = HistoryEntry(text=text, ts=time.time())
-    _entries.append(entry)
-    if len(_entries) > MAX_ENTRIES:
-        del _entries[0]  # rolling: drop the oldest, keep the recent ones
-    if _persist:
+    with _lock:
+        _entries.append(entry)
+        if len(_entries) > MAX_ENTRIES:
+            del _entries[0]  # rolling: drop the oldest, keep the recent ones
+        should_persist = _persist
+    if should_persist:
         from . import history_store
 
         history_store.add(entry.text, entry.ts)
@@ -130,7 +146,8 @@ def clear_memory() -> None:
     The on-disk store is the user's data; clearing memory is an implementation
     detail of process lifecycle, not a user action.
     """
-    _entries.clear()
+    with _lock:
+        _entries.clear()
 
 
 def clear() -> None:
@@ -141,8 +158,10 @@ def clear() -> None:
     on normal shutdown/restart — use ``clear_memory()`` instead so the
     persisted store survives.
     """
-    _entries.clear()
-    if _persist:
+    with _lock:
+        _entries.clear()
+        should_persist = _persist
+    if should_persist:
         from . import history_store
 
         history_store.clear()
