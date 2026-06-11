@@ -18,6 +18,7 @@ import contextlib
 import logging
 import os
 import sqlite3
+import time
 from pathlib import Path
 
 log = logging.getLogger(__name__)
@@ -39,17 +40,72 @@ def db_path() -> Path:
 
 
 def _connect() -> sqlite3.Connection:
+    """Open (or create) the SQLite history database.
+
+    Handles two extra failure modes that the plain sqlite3.connect() call does
+    not cover on its own:
+
+    - ``OSError`` on directory creation or file open (e.g. APPDATA missing,
+      permissions denied) — treated as a non-fatal warning; caller catches it.
+    - ``sqlite3.DatabaseError`` (corrupt file, e.g. partial write, zero-byte
+      file) — the corrupt file is renamed to ``history.db.corrupt-<ts>`` and a
+      fresh empty database is created in its place. This prevents persistence
+      from staying permanently broken just because a previous write was
+      interrupted.
+    """
     p = db_path()
-    p.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(p)
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS transcripts ("
-        "  id INTEGER PRIMARY KEY AUTOINCREMENT,"
-        "  text TEXT NOT NULL,"
-        "  ts REAL NOT NULL"
-        ")"
-    )
-    return conn
+    try:
+        p.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        log.warning("could not create history db directory %s: %s", p.parent, e)
+        raise
+
+    bad_conn: sqlite3.Connection | None = None
+    try:
+        bad_conn = sqlite3.connect(p)
+        bad_conn.execute(
+            "CREATE TABLE IF NOT EXISTS transcripts ("
+            "  id INTEGER PRIMARY KEY AUTOINCREMENT,"
+            "  text TEXT NOT NULL,"
+            "  ts REAL NOT NULL"
+            ")"
+        )
+        return bad_conn
+    except sqlite3.DatabaseError as e:
+        # Corrupt or truncated database file. Close the handle first (on Windows
+        # an open sqlite3.Connection keeps a file lock that blocks rename), then
+        # quarantine the file and start fresh.
+        if bad_conn is not None:
+            try:
+                bad_conn.close()
+            except Exception:  # noqa: BLE001
+                pass
+        ts_tag = int(time.time())
+        backup = p.with_name(f"{p.name}.corrupt-{ts_tag}")
+        log.warning(
+            "history db at %s is corrupt (%s); quarantining to %s and recreating",
+            p,
+            e,
+            backup,
+        )
+        try:
+            p.rename(backup)
+        except OSError as oe:
+            log.warning("could not rename corrupt db: %s", oe)
+            try:
+                p.unlink(missing_ok=True)
+            except OSError:
+                pass
+        # Recurse once to create a clean database in place of the corrupt one.
+        conn = sqlite3.connect(p)
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS transcripts ("
+            "  id INTEGER PRIMARY KEY AUTOINCREMENT,"
+            "  text TEXT NOT NULL,"
+            "  ts REAL NOT NULL"
+            ")"
+        )
+        return conn
 
 
 def add(text: str, ts: float) -> None:
@@ -65,7 +121,7 @@ def add(text: str, ts: float) -> None:
                 "(SELECT id FROM transcripts ORDER BY id DESC LIMIT ?)",
                 (DB_MAX_ROWS,),
             )
-    except sqlite3.Error as e:
+    except (sqlite3.Error, OSError) as e:
         log.warning("could not persist transcript: %s", e)
 
 
@@ -78,7 +134,7 @@ def load_recent(limit: int) -> list[tuple[str, float]]:
                 (limit,),
             ).fetchall()
         return [(t, ts) for t, ts in reversed(rows)]
-    except sqlite3.Error as e:
+    except (sqlite3.Error, OSError) as e:
         log.warning("could not read history db: %s", e)
         return []
 
@@ -88,7 +144,7 @@ def clear() -> None:
     try:
         with contextlib.closing(_connect()) as conn, conn:
             conn.execute("DELETE FROM transcripts")
-    except sqlite3.Error as e:
+    except (sqlite3.Error, OSError) as e:
         log.warning("could not clear history db: %s", e)
 
 

@@ -51,8 +51,10 @@ def _configure_logging() -> None:
     Chatty third-party libs are pinned to WARNING so the log stream stays
     readable instead of being drowned in httpcore / PIL plugin-import / urllib3.
 
-    Note: the file log captures every transcript verbatim. Fine on a personal
-    machine; worth knowing if a copy of the log file ever needs to leave it.
+    Note: the file log does NOT capture transcript text. ``_on_transcribed()``
+    logs only the character count, never the content — no transcript ever
+    appears in the log. This is consistent with the privacy statement in
+    README.md (local offline, no data leaves the machine).
     """
     root = logging.getLogger()
     if root.handlers:
