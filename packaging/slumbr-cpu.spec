@@ -79,6 +79,10 @@ exe = EXE(
     name="Slumbr",
     console=False,  # no console window (matches pythonw launch)
     icon="../slumbr/assets/icon.ico",
+    # Embed the Windows version resource so the CPU exe identifies as
+    # "Slumbr <version>" (not blank / "Python") in Explorer + the taskbar,
+    # matching the NVIDIA build. Keep version_info.txt in sync on a bump.
+    version=os.path.join(SPECPATH, "version_info.txt"),
 )
 coll = COLLECT(
     exe,
