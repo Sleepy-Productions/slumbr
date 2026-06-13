@@ -6,6 +6,18 @@ Slumbr follows SemVer: **MAJOR** for breaking changes (config format / behavior)
 
 ## [Unreleased]
 
+## [1.1.1] — 2026-06-13
+
+A maintenance point-release: correctness and robustness fixes found in a post-tag code review. No new features; safe drop-in over 1.1.0.
+
+### Fixed
+- **History persistence no longer wiped on restart.** With *Keep history across restarts* enabled, quitting and reopening now merges the in-memory and on-disk transcripts instead of clearing the store, so saved history survives a restart.
+- **Thread-safe history.** Every read and write of the history buffer is now guarded by a lock, closing a race where a transcript landing mid-rotation could be silently lost.
+- **Mic-mirror resilience.** The virtual-cable mirror now reopens after an audio-device error and is guarded against being torn down mid-dictation by a concurrent Settings device change.
+- **Bootstrap install on paths with spaces.** The editable-install command is now built as a proper argument list, so installing from a repo path containing spaces no longer splits the path.
+- **Atomic state + safer shutdown.** The transcriber waits for its worker before closing (avoids a native use-after-free), and the history store quarantines a corrupt database and survives Windows file locks.
+- **Runaway-repetition collapse** thresholds pinned with regression tests to guard against silent future drift.
+
 ## [1.1.0] — 2026-05-29
 
 Post-launch round addressing external review feedback: smarter history, an opt-in to keep it, looser dependency pins, real CI, and an accuracy tier for strong GPUs.
