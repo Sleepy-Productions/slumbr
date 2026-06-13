@@ -35,6 +35,7 @@ for _stream_name in ("stdout", "stderr"):
     if getattr(sys, _stream_name, None) is None:
         setattr(sys, _stream_name, open(os.devnull, "w", encoding="utf-8"))  # noqa: SIM115
 
+
 def _configure_logging() -> None:
     """One-time root-logger setup.
 

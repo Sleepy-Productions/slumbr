@@ -40,6 +40,7 @@ def build_transcriber(
     if name == "cpu_ct2" and getattr(sys, "frozen", False):
         log.warning("cpu_ct2 is unavailable in packaged builds; using Moonshine instead")
         from ..config import BackendConfig  # noqa: PLC0415
+
         cfg = BackendConfig(name="moonshine", model="moonshine-base-en-int8")
         name = cfg.name
     log.info("building transcriber: backend=%s model=%s", name, cfg.model)
