@@ -12,7 +12,7 @@
 <p align="center">
   <img alt="platform: Windows 10/11" src="https://img.shields.io/badge/platform-Windows%2010%20%2F%2011-2b2d31">
   <img alt="license: MIT" src="https://img.shields.io/badge/license-MIT-7C3AED">
-  <img alt="version 1.1.0" src="https://img.shields.io/badge/version-1.1.0-2b2d31">
+  <img alt="version 1.1.1" src="https://img.shields.io/badge/version-1.1.1-2b2d31">
   <img alt="100% offline" src="https://img.shields.io/badge/offline-100%25%20on--device-1f9d55">
 </p>
 

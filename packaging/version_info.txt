@@ -6,8 +6,8 @@
 # Keep the versions in sync with pyproject / __init__ on a release bump.
 VSVersionInfo(
   ffi=FixedFileInfo(
-    filevers=(1, 1, 0, 0),
-    prodvers=(1, 1, 0, 0),
+    filevers=(1, 1, 1, 0),
+    prodvers=(1, 1, 1, 0),
     mask=0x3f,
     flags=0x0,
     OS=0x40004,
@@ -20,11 +20,11 @@ VSVersionInfo(
       StringTable('040904B0', [
         StringStruct('CompanyName', 'Sleepy Productions'),
         StringStruct('FileDescription', 'Slumbr'),
-        StringStruct('FileVersion', '1.1.0'),
+        StringStruct('FileVersion', '1.1.1'),
         StringStruct('InternalName', 'Slumbr'),
         StringStruct('OriginalFilename', 'Slumbr.exe'),
         StringStruct('ProductName', 'Slumbr'),
-        StringStruct('ProductVersion', '1.1.0'),
+        StringStruct('ProductVersion', '1.1.1'),
         StringStruct('LegalCopyright', 'Sleepy Productions'),
       ]),
     ]),
