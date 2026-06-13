@@ -14,8 +14,6 @@ Covers:
 
 from __future__ import annotations
 
-import sqlite3
-import threading
 import time
 
 import pytest
@@ -88,7 +86,9 @@ class TestConfigureMidSession:
         history.configure(True)
 
         texts = [e.text for e in history.load_all()]
-        assert "dictated before enabling" in texts, "pre-enable entries must survive configure(True)"
+        assert "dictated before enabling" in texts, (
+            "pre-enable entries must survive configure(True)"
+        )
         assert "also before" in texts
 
     def test_enable_persistence_writes_memory_entries_to_disk(self, tmp_path):
