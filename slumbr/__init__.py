@@ -201,6 +201,19 @@ _boot_log = logging.getLogger("slumbr.bootstrap")
 _NVIDIA_BIN_DIRS: list[Path] = []
 
 
+def cuda_runtime_bundled() -> bool:
+    """True iff the NVIDIA CUDA runtime wheels were found and wired in.
+
+    In a FROZEN build this is the load-bearing signal that this download is the
+    NVIDIA flavor: the CPU installer ships ``faster_whisper`` (pure Python) but
+    NOT the CUDA DLLs, so ``import faster_whisper`` succeeds yet a cuda_ct2 model
+    load access-violates at first GPU use. Callers (e.g. the setup wizard) use
+    this to treat cuda_ct2 as unavailable in a CPU bundle and fall back to the
+    always-bundled Moonshine engine instead of crashing.
+    """
+    return bool(_NVIDIA_BIN_DIRS)
+
+
 def _add_nvidia_dll_dirs() -> None:
     if sys.platform != "win32":
         return

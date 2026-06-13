@@ -371,3 +371,55 @@ class TestLoggingDocstringAccuracy:
         assert "captures every transcript verbatim" not in src, (
             "_configure_logging docstring must not claim transcripts are logged verbatim"
         )
+
+
+# ============================ Fix 9: frozen CPU build never hard-crashes on cuda_ct2
+class TestFrozenCudaCt2Redirect:
+    """A CPU installer carrying a saved/recommended cuda_ct2 config (e.g. a GPU
+    machine that ran the CPU build) must redirect to the bundled Moonshine engine
+    instead of access-violating at GPU model load. Mirrors the existing cpu_ct2
+    frozen redirect. See slumbr/stt/factory.build_transcriber."""
+
+    def test_cuda_ct2_redirects_to_moonshine_when_runtime_not_bundled(self, monkeypatch):
+        import sys as _sys
+
+        import slumbr.stt.factory as factory
+        from slumbr.config import BackendConfig
+
+        built = {}
+
+        class _FakeMoonshine:
+            def __init__(self, cfg, *, language, initial_prompt):
+                built["name"] = cfg.name
+
+        # Simulate a frozen CPU build: frozen=True, no CUDA runtime bundled.
+        monkeypatch.setattr(_sys, "frozen", True, raising=False)
+        monkeypatch.setattr("slumbr.cuda_runtime_bundled", lambda: False)
+        monkeypatch.setattr("slumbr.stt.backends.moonshine.MoonshineTranscriber", _FakeMoonshine)
+
+        cfg = BackendConfig(name="cuda_ct2", model="large-v3")
+        factory.build_transcriber(cfg, language=None, initial_prompt="")
+        assert built["name"] == "moonshine", (
+            "cuda_ct2 must redirect to Moonshine in a frozen CPU build"
+        )
+
+    def test_cuda_ct2_kept_when_runtime_is_bundled(self, monkeypatch):
+        """On the NVIDIA build (CUDA bundled) cuda_ct2 must NOT be redirected."""
+        import sys as _sys
+
+        import slumbr.stt.factory as factory
+        from slumbr.config import BackendConfig
+
+        built = {}
+
+        class _FakeWhisper:
+            def __init__(self, cfg, *, language, initial_prompt):
+                built["name"] = cfg.name
+
+        monkeypatch.setattr(_sys, "frozen", True, raising=False)
+        monkeypatch.setattr("slumbr.cuda_runtime_bundled", lambda: True)
+        monkeypatch.setattr("slumbr.stt.backends.whisper_ct2.WhisperCT2Transcriber", _FakeWhisper)
+
+        cfg = BackendConfig(name="cuda_ct2", model="large-v3")
+        factory.build_transcriber(cfg, language=None, initial_prompt="")
+        assert built["name"] == "cuda_ct2", "cuda_ct2 must be kept when the CUDA runtime is bundled"

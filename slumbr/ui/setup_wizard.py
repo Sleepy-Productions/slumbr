@@ -714,6 +714,18 @@ def _is_backend_installed(backend_name: str) -> bool:
     """
     import importlib.util  # noqa: PLC0415
 
+    # In a FROZEN build the backend set is fixed at build time. The CPU installer
+    # ships faster_whisper (pure Python) but NOT the CUDA runtime DLLs, so the
+    # find_spec probe below would say cuda_ct2 is "installed" — yet a GPU model
+    # load access-violates at first transcribe. Gate cuda_ct2 on the CUDA runtime
+    # actually being bundled so the wizard routes to the Moonshine fallback in a
+    # CPU build instead of committing an unrunnable backend.
+    if backend_name == "cuda_ct2" and getattr(sys, "frozen", False):
+        from slumbr import cuda_runtime_bundled  # noqa: PLC0415
+
+        if not cuda_runtime_bundled():
+            return False
+
     probes: dict[str, list[str]] = {
         # cuda_ct2 needs faster-whisper + ctranslate2 + the NVIDIA CUDA wheels.
         # We only check faster_whisper since it transitively pulls ctranslate2,

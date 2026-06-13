@@ -43,6 +43,22 @@ def build_transcriber(
 
         cfg = BackendConfig(name="moonshine", model="moonshine-base-en-int8")
         name = cfg.name
+    # cuda_ct2 with NO bundled CUDA runtime = a CPU installer carrying a saved
+    # GPU config (e.g. a user who moved their config, or a GPU machine that ran
+    # the CPU build). faster_whisper imports fine but the GPU model load
+    # access-violates natively. Redirect to the always-bundled Moonshine engine
+    # so the CPU build never hard-crashes on a stray cuda_ct2 config.
+    if name == "cuda_ct2" and getattr(sys, "frozen", False):
+        from .. import cuda_runtime_bundled  # noqa: PLC0415
+
+        if not cuda_runtime_bundled():
+            log.warning(
+                "cuda_ct2 selected but no CUDA runtime is bundled (CPU build); using Moonshine instead"
+            )
+            from ..config import BackendConfig  # noqa: PLC0415
+
+            cfg = BackendConfig(name="moonshine", model="moonshine-base-en-int8")
+            name = cfg.name
     log.info("building transcriber: backend=%s model=%s", name, cfg.model)
 
     if name in ("cuda_ct2", "cpu_ct2"):
