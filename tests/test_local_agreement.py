@@ -55,10 +55,12 @@ def test_committed_never_shrinks() -> None:
     # committed text must remain committed.
     committed, tentative = la2.feed("hello world")
     assert committed == "hello world this is a test"
-    # Nothing new to render as tentative because the new pass is fully
-    # absorbed by the committed prefix... actually `words` is shorter
-    # than committed, so tentative is empty.
-    assert tentative == ""
+    # The new pass ("hello world") disagrees with the committed prefix —
+    # the model rewrote further back than what was committed. The correct
+    # behavior is to surface the full new pass as tentative so the popup
+    # shows what the model is currently thinking, rather than silently
+    # hiding it via a slice that starts past the end of the short pass.
+    assert tentative == "hello world"
 
 
 def test_force_commit_after_timeout() -> None:
@@ -73,6 +75,25 @@ def test_force_commit_after_timeout() -> None:
     # Watchdog should force-commit the current tentative tail.
     assert "baz" in committed
     assert tentative == ""
+
+
+def test_rewrite_shows_full_current_pass_as_tentative() -> None:
+    """When the model walks back past already-committed words the tentative
+    tail must be the *full* current pass, not words[len(committed):] which
+    would silently skip the first words of the new text. Regression for the
+    dead-else-branch bug where both branches produced the same slice."""
+    la2 = _LocalAgreement2()
+    # Commit "hello world" on two agreeing passes.
+    la2.feed("hello world extra words to reach threshold")
+    la2.feed("hello world extra words to reach threshold")
+    committed, _ = la2.feed("hello world extra words to reach threshold")
+    assert committed == "hello world extra words to reach threshold"
+    # Model rewrites from scratch — pass starts with "completely" not "hello".
+    committed2, tentative2 = la2.feed("completely different text now")
+    # Committed must still hold (never shrinks), tentative must show ALL of
+    # the new pass — not a slice starting mid-text.
+    assert committed2 == "hello world extra words to reach threshold"
+    assert tentative2 == "completely different text now"
 
 
 def test_reset_clears_state() -> None:

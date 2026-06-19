@@ -1,0 +1,8 @@
+# .mailmap — canonicalize author identity to the SleepyDev / Sleepy Productions
+# identity, mapping out the old 2006 personal gmail
+# ([[feedback-dont-use-old-gmail-as-identity]] + [[feedback-identity-naming-convention]]).
+# Defensive: does NOT rewrite history; ensures every log/display/rebuild shows the
+# canonical identity. main is already clean; this also covers the non-main
+# `backup-pre-emailscrub` branch which carries the old identity and must NOT be pushed.
+SleepyGenius <234798539+SIeepyDev@users.noreply.github.com> <averion.carnes2006@gmail.com>
+SleepyGenius <234798539+SIeepyDev@users.noreply.github.com> SleepyGenius <averion.carnes2006@gmail.com>
