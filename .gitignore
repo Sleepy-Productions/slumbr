@@ -73,3 +73,9 @@ sleepy_errlog.py
 
 # sleepy_errlog local-only output (privacy-golden-standard)
 .errlog.jsonl
+
+# Secrets / env — NEVER commit (public repo). Covers .env, .env.local, .env.* ;
+# keeps the documented .env.example template (negated).
+.env
+.env.*
+!.env.example
