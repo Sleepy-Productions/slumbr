@@ -17,7 +17,7 @@ If you'd like to propose changing any of these, open an issue first — don't st
 ## Dev setup
 
 ```powershell
-git clone https://github.com/SIeepyDev/slumbr.git
+git clone https://github.com/Sleepy-Productions/slumbr.git
 cd slumbr
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1

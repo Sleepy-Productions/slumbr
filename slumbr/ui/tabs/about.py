@@ -12,7 +12,7 @@ from ...config import SlumbrConfig
 from ...theme import FONT_DISPLAY, TEXT_PRIMARY, TEXT_SECONDARY, VIOLET_PRIMARY
 from ._widgets import glyph_pixmap, heading, scrollable, tag
 
-_REPO_URL = "https://github.com/SIeepyDev/slumbr"
+_REPO_URL = "https://github.com/Sleepy-Productions/slumbr"
 _LOGO_PX = 88
 
 

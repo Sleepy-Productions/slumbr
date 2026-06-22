@@ -113,10 +113,10 @@ package = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/SIeepyDev/slumbr"
-Repository = "https://github.com/SIeepyDev/slumbr"
-Issues = "https://github.com/SIeepyDev/slumbr/issues"
-Changelog = "https://github.com/SIeepyDev/slumbr/blob/main/CHANGELOG.md"
+Homepage = "https://github.com/Sleepy-Productions/slumbr"
+Repository = "https://github.com/Sleepy-Productions/slumbr"
+Issues = "https://github.com/Sleepy-Productions/slumbr/issues"
+Changelog = "https://github.com/Sleepy-Productions/slumbr/blob/main/CHANGELOG.md"
 
 [project.scripts]
 slumbr = "slumbr.__main__:main"

@@ -40,7 +40,7 @@ Windows 10 / 11 (64-bit) — no admin required (except the *optional* VB-Cable d
 
 ### Option A — one-click installer (easiest)
 
-Grab the build for your hardware from the [**Releases**](https://github.com/SIeepyDev/slumbr/releases/latest) page:
+Grab the build for your hardware from the [**Releases**](https://github.com/Sleepy-Productions/slumbr/releases/latest) page:
 
 | Download | For | Notes |
 | --- | --- | --- |
@@ -56,7 +56,7 @@ Not sure which? **Start with the CPU build** — it works everywhere, and you ca
 Installs from a clone and auto-installs the right backend for your hardware — including AMD / Intel DirectML:
 
 ```powershell
-git clone https://github.com/SIeepyDev/slumbr.git
+git clone https://github.com/Sleepy-Productions/slumbr.git
 cd slumbr
 .\install.ps1
 ```
@@ -203,4 +203,4 @@ MIT — see [LICENSE](LICENSE).
 
 ---
 
-<p align="center">Built by <a href="https://github.com/SIeepyDev">Sleepy Productions</a>.</p>
+<p align="center">Built by <a href="https://github.com/Sleepy-Productions">Sleepy Productions</a>.</p>

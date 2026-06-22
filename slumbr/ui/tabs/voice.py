@@ -54,7 +54,7 @@ from ._widgets import (
 
 # Where the "Discord push-to-mute" how-to lives.
 _DISCORD_MUTE_HELP = (
-    "https://github.com/SIeepyDev/slumbr#mute-other-apps-while-dictating-reverse-ptt"
+    "https://github.com/Sleepy-Productions/slumbr#mute-other-apps-while-dictating-reverse-ptt"
 )
 
 
