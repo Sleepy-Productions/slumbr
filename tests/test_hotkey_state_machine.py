@@ -17,8 +17,6 @@ Coverage targets:
 
 from __future__ import annotations
 
-import pytest
-
 from slumbr.input.hotkey import Hotkey
 
 # Reusable no-op callback — _process doesn't call it (it's returned as a flag),

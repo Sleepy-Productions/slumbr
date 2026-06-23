@@ -14,13 +14,10 @@ Load-bearing invariants exercised:
 
 from __future__ import annotations
 
-import threading
-
 import numpy as np
 import pytest
 
 from slumbr.audio.mirror import MicMirror
-
 
 # ---------------------------------------------------------------------------
 # Minimal sounddevice stubs (no real audio).

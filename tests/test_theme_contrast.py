@@ -16,7 +16,6 @@ import pytest
 
 from slumbr.theme import TEXT_PRIMARY, text_on
 
-
 # ------------------------------------------------------------------ light fills
 
 
