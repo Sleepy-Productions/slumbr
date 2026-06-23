@@ -4,7 +4,6 @@ import logging
 import time
 
 import numpy as np
-from faster_whisper import WhisperModel
 
 from .._bundled import bundled_models_root
 
@@ -46,6 +45,13 @@ class WhisperEngine:
         language: str | None = None,
         initial_prompt: str = "",
     ) -> None:
+        try:
+            from faster_whisper import WhisperModel  # noqa: PLC0415
+        except ImportError as exc:
+            raise ImportError(
+                "faster-whisper is required for WhisperEngine. "
+                "Install the nvidia extra: pip install slumbr[nvidia]"
+            ) from exc
         log.info("loading %r on %s (%s)...", model_size, device, compute_type)
         t0 = time.monotonic()
         self.model = WhisperModel(
