@@ -185,6 +185,9 @@ Settings → Voice → Input device. The list shows your **real mics only** — 
 **Discord (or another call app) doesn't hear me.**
 On the **Voice** tab → **Virtual mic cable** section, make sure **"Route my mic through a virtual cable"** is ticked and the right cable is selected. In Discord, the mic must be **"CABLE Output (VB-Audio Virtual Cable)"** — counterintuitive name, but correct. The log at `%APPDATA%\Slumbr\logs\slumbr.log` shows `MicMirror started …` when routing is live.
 
+**Rollback / uninstall.**
+`%LOCALAPPDATA%\Programs\Slumbr\unins000.exe /VERYSILENT` — removes the app and its Start Menu entry in one line (no admin needed). Your config and history at `%APPDATA%\Slumbr` are not touched and can be deleted separately.
+
 ## Limitations
 
 - **Windows-only.** WASAPI, the Win32 hotkey hook, and Windows clipboard APIs aren't abstracted.
