@@ -432,12 +432,16 @@ class _LocalAgreement2:
         # Tentative tail: the portion of this pass after the committed
         # prefix. If the pass no longer starts with the committed words
         # (model rewrote what we already promoted — rare for word-level
-        # LA-2 on stable models), show the un-matched portion of this
-        # pass as tentative; the committed prefix stays visible.
+        # LA-2 on stable models), show ALL of the current pass as
+        # tentative; the committed prefix stays visible above it.
+        # Previously both branches computed words[len(committed):], which
+        # is correct only when the prefix matches — on a rewrite the
+        # slice would skip into the middle of the new text, silently
+        # hiding the model's first words.
         if words[: len(self._committed_words)] == self._committed_words:
             tentative_words = words[len(self._committed_words) :]
         else:
-            tentative_words = words[len(self._committed_words) :]
+            tentative_words = words
 
         # Stuck-tail watchdog. If committed length hasn't grown for
         # `_timeout_s`, force-commit the current tentative tail. Keeps
